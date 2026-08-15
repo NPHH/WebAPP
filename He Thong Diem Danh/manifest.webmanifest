@@ -1,0 +1,11 @@
+{
+  "name": "Đăng ký khuôn mặt học sinh",
+  "short_name": "Khuôn mặt HS",
+  "description": "Chụp và lưu cục bộ mẫu khuôn mặt trước khi đồng bộ với Google.",
+  "start_url": "./camera.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#071727",
+  "theme_color": "#0f2743",
+  "lang": "vi"
+}
