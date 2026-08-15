@@ -33,6 +33,14 @@
     #fallbackCapture{display:none;background:#fff;color:var(--navy)}
     #capture{background:#fff;color:var(--navy)} #finish{background:var(--teal);color:#fff} button:disabled{opacity:.42}
     canvas{display:none}
+    .result-overlay{display:none;position:fixed;inset:0;z-index:100;background:#071727;padding:18px;align-items:center;justify-content:center}
+    .result-overlay.show{display:flex}
+    .result-card{width:min(520px,100%);background:#0f2743;border-radius:28px;padding:42px 24px;text-align:center}
+    .result-icon{width:96px;height:96px;margin:0 auto 24px;border-radius:50%;display:grid;place-items:center;font-size:56px;background:var(--teal)}
+    .result-title{font-size:32px;font-weight:800;margin-bottom:16px}
+    .result-text{font-size:19px;font-weight:600;line-height:1.55;color:#eef5fb}
+    .result-auto{font-size:15px;color:var(--muted);margin-top:14px}
+    .result-close{width:100%;margin-top:24px;background:#fff;color:var(--navy)}
   </style>
 </head>
 <body>
@@ -58,6 +66,15 @@
       <input id="fallbackInput" type="file" accept="image/*" capture="user" hidden>
     </div>
   </footer>
+  <div class="result-overlay" id="resultOverlay">
+    <div class="result-card">
+      <div class="result-icon">✓</div>
+      <div class="result-title">Đăng ký thành công</div>
+      <div class="result-text" id="resultText">Đã lưu ảnh và 5 mẫu khuôn mặt.</div>
+      <div class="result-auto">Thẻ camera sẽ tự đóng sau 3 giây…</div>
+      <button class="result-close" id="resultClose" type="button">Đóng và quay lại WebApp</button>
+    </div>
+  </div>
 
   <script>
     /*
@@ -173,6 +190,8 @@
         $('instruction').textContent=instructions[0];
         setMessage(modelsReady?'Đưa một khuôn mặt vào giữa khung rồi bấm Chụp mẫu.':'Camera đã mở. Đang nạp mô hình nhận diện...');
         await loadModels();
+        // Chờ Safari ổn định luồng hình trước khi cho phép lần chụp đầu tiên.
+        await new Promise(resolve=>setTimeout(resolve,650));
         setMessage('Đưa một khuôn mặt vào giữa khung rồi bấm Chụp mẫu.');
         $('capture').disabled=false;
       }catch(error){
@@ -287,8 +306,8 @@
     }
 
     /**
-     * Gửi trực tiếp sang Apps Script. Trang kết quả sẽ hiện rõ thành công hoặc
-     * lỗi; không phụ thuộc iframe, CORS hay window.opener.
+     * Gửi nền sang Apps Script bằng iframe ẩn, sau đó kiểm tra kết quả bằng
+     * JSONP. Trang camera không đổi địa chỉ nên Safari vẫn cho tự đóng thẻ.
      */
     function finish(){
       if(vectors.length!==5||!portraitDataUrl||uploadBusy)return;
@@ -297,10 +316,18 @@
       $('capture').disabled=true;
       setMessage('Đang lưu ảnh và 5 mẫu khuôn mặt về hệ thống...');
 
+      let target=document.getElementById('uploadTarget');
+      if(!target){
+        target=document.createElement('iframe');
+        target.id='uploadTarget';
+        target.name='faceUploadTarget';
+        target.hidden=true;
+        document.body.appendChild(target);
+      }
       const form=document.createElement('form');
       form.method='POST';
       form.action=submitUrl;
-      form.target='_self';
+      form.target='faceUploadTarget';
       form.style.display='none';
       const fields={
         action:'faceRegistrationUpload',
@@ -316,6 +343,55 @@
       document.body.appendChild(form);
       form.submit();
       form.remove();
+      pollUploadResult(0);
+    }
+
+    function pollUploadResult(attempt){
+      if(!uploadBusy)return;
+      if(attempt>45){
+        uploadBusy=false;
+        $('finish').disabled=false;
+        setMessage('Chưa nhận được kết quả lưu. Hãy kiểm tra mạng rồi bấm Hoàn tất lại.');
+        return;
+      }
+      const callbackName='faceStatus'+Date.now()+Math.floor(Math.random()*10000);
+      const script=document.createElement('script');
+      let completed=false;
+      window[callbackName]=data=>{
+        completed=true;
+        delete window[callbackName];
+        script.remove();
+        if(data&&data.done){
+          uploadBusy=false;
+          if(data.ok){showSaveSuccess(data.message)}
+          else{
+            $('finish').disabled=false;
+            setMessage('Lưu thất bại: '+(data.message||'Lỗi không xác định'));
+          }
+        }else setTimeout(()=>pollUploadResult(attempt+1),650);
+      };
+      script.onerror=()=>{
+        if(completed)return;
+        delete window[callbackName];script.remove();
+        setTimeout(()=>pollUploadResult(attempt+1),900);
+      };
+      const separator=submitUrl.indexOf('?')===-1?'?':'&';
+      script.src=submitUrl+separator+'action=faceRegistrationStatus&token='+encodeURIComponent(token)+
+        '&callback='+encodeURIComponent(callbackName)+'&_='+Date.now();
+      document.head.appendChild(script);
+    }
+
+    function closeCameraTab(){
+      try{if(window.opener)window.opener.focus()}catch(ignored){}
+      window.close();
+    }
+
+    function showSaveSuccess(message){
+      stop();
+      $('resultText').textContent=message||'Đã lưu ảnh và 5 mẫu khuôn mặt.';
+      $('resultOverlay').classList.add('show');
+      try{if(window.opener)window.opener.postMessage({type:'FACE_REGISTRATION_SAVED',token},'*')}catch(ignored){}
+      setTimeout(closeCameraTab,3000);
     }
 
     // Apps Script trả kết quả về từ iframe ẩn. Chỉ nhận đúng mã phiên hiện tại.
@@ -348,6 +424,7 @@
     $('switchCamera').addEventListener('click',switchCamera);
     $('fallbackCapture').addEventListener('click',openFallbackCamera);
     $('fallbackInput').addEventListener('change',event=>processFallbackPhoto(event.target.files&&event.target.files[0]));
+    $('resultClose').addEventListener('click',closeCameraTab);
     $('capture').addEventListener('click',capture);$('finish').addEventListener('click',finish);
     window.addEventListener('beforeunload',stop);renderProgress();
     preparePage().catch(error=>{setMessage(error.message||String(error));$('instruction').textContent='Không thể chuẩn bị trang camera';$('startCamera').disabled=true;});
