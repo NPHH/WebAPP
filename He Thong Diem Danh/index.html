@@ -1,0 +1,2155 @@
+<!--
+===============================================================================
+WEBAPP ĐIỂM DANH HỌC SINH - GIAO DIỆN INDEX.HTML
+===============================================================================
+HƯỚNG DẪN NHANH KHI MỞ LẠI SAU MỘT NĂM
+
+1. File này có ba phần: HTML (nội dung), CSS trong <style> (hình thức),
+   JavaScript trong <script> (tải dữ liệu và xử lý thao tác).
+
+2. Những chỗ thường cần chỉnh:
+   - Tên ứng dụng: tìm "Điểm danh học sinh".
+   - Màu giao diện: chỉnh các biến màu trong :root ở đầu CSS.
+   - Chữ trên nút: tìm "Có mặt", "Vắng", "Có phép".
+   - Số giờ mỗi buổi: hiện đang nhân 4 trong hàm loadAbsenceStats().
+
+3. Danh sách lớp, giáo viên, môn học và học sinh được lấy từ Code.gs và Sheet,
+   không viết cố định trong file này.
+
+4. Không đổi các id như classSelect, teacherSelect, subjectSelect,
+   attendanceDate, studentName... nếu chưa sửa đồng thời JavaScript.
+
+5. Không đổi tên các hàm phía Code.gs mà giao diện đang gọi, gồm:
+   getAppConfig, getClassData, saveAttendance, getAbsenceStats,
+   getFaceRegistrationData, saveFaceRegistration và getStudentPhoto.
+
+6. Sau khi sửa: Lưu và triển khai WebApp bằng một phiên bản mới.
+===============================================================================
+-->
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<base target="_top">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Điểm danh học sinh</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+  /* BẢNG MÀU CHUNG: nên đổi màu tại đây thay vì sửa từng vị trí bên dưới. */
+  :root{
+    --ink:#122238;
+    --ink-soft:#5b6b82;
+    --paper:#eef2f6;
+    --card:#ffffff;
+    --line:#dfe6ee;
+    --navy:#1c3a5e;
+    --navy-deep:#0f2743;
+    --teal:#1f9d8b;
+    --teal-soft:#e4f5f1;
+    --amber:#e3922b;
+    --amber-soft:#fbf0df;
+    --coral:#d85c4a;
+    --coral-soft:#fbe8e4;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Be Vietnam Pro', sans-serif;
+    background:
+      radial-gradient(circle at 15% 8%, #e9eff5 0%, transparent 45%),
+      var(--paper);
+    min-height:100vh;
+    display:flex;
+    align-items:flex-start;
+    justify-content:center;
+    padding:36px 16px;
+  }
+
+  .device{
+    width:390px;
+    max-width:100%;
+    background:var(--card);
+    border-radius:34px;
+    box-shadow:0 24px 60px -18px rgba(15,39,67,0.35), 0 2px 8px rgba(15,39,67,0.08);
+    overflow:hidden;
+    border:8px solid var(--navy-deep);
+    position:relative;
+  }
+  .notch{
+    position:absolute;
+    top:8px; left:50%; transform:translateX(-50%);
+    width:120px; height:20px;
+    background:var(--navy-deep);
+    border-radius:0 0 14px 14px;
+    z-index:20;
+  }
+
+  /* status bar */
+  .statusbar{
+    background:var(--navy-deep);
+    color:#cdd9e5;
+    font-family:'Space Grotesk',sans-serif;
+    font-size:12px;
+    font-weight:600;
+    padding:14px 22px 6px;
+    display:flex;
+    justify-content:space-between;
+    letter-spacing:.02em;
+  }
+
+  /* top header + filter selects */
+  .tabbar{
+    background:var(--paper);
+    padding:calc(max(14px, env(safe-area-inset-top)) + 63px) 0 0;
+  }
+  .tabbar-top{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    padding:max(14px, env(safe-area-inset-top)) 14px 13px;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0) 40%),
+      var(--navy-deep);
+    box-shadow:0 6px 16px -10px rgba(5,15,28,0.35);
+    position:fixed;
+    top:0;
+    left:0;
+    right:0;
+    z-index:50;
+  }
+  .tabbar-title{
+    font-family:'Space Grotesk',sans-serif;
+    font-size:13px;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color:#eef4fb;
+    font-weight:700;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .tabbar-title::before{
+    content:"";
+    width:7px;height:7px;
+    border-radius:50%;
+    background:var(--teal);
+    box-shadow:0 0 0 4px rgba(31,157,139,0.22);
+    flex:0 0 auto;
+  }
+  .camera-icon-btn{
+    flex:0 0 auto;
+    width:34px;height:34px;
+    border-radius:10px;
+    background:var(--navy);
+    border:1px solid rgba(255,255,255,0.12);
+    display:flex;align-items:center;justify-content:center;
+    position:relative;
+  }
+  .camera-icon-btn svg{width:17px;height:17px;stroke:#fff;}
+  .camera-icon-btn .live-dot{
+    position:absolute;
+    top:-3px;right:-3px;
+    width:9px;height:9px;
+    border-radius:50%;
+    background:var(--coral);
+    border:2px solid var(--navy-deep);
+  }
+
+  .filter-stack{
+    display:flex;
+    flex-direction:column;
+    gap:9px;
+    padding:0 16px 12px;
+  }
+  .select-wrap{
+    position:relative;
+    display:flex;
+    align-items:center;
+    border-radius:13px;
+    transition:transform .12s ease;
+  }
+  .select-wrap:focus-within{transform:translateY(-1px);}
+  .select-icon{
+    position:absolute;
+    left:12px;
+    width:15px;height:15px;
+    stroke:var(--navy);
+    pointer-events:none;
+  }
+  .filter-select{
+    -webkit-appearance:none;
+    appearance:none;
+    width:100%;
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:13px;
+    padding:11px 32px 11px 36px;
+    font-family:'Be Vietnam Pro', sans-serif;
+    font-size:13px;
+    font-weight:600;
+    color:var(--ink);
+    box-shadow:0 6px 14px -10px rgba(15,39,67,0.18);
+    transition:border-color .15s ease, box-shadow .15s ease;
+  }
+  .filter-select:focus{
+    outline:none;
+    border-color:#9fb0c2;
+    box-shadow:0 0 0 3px rgba(15,39,67,0.1);
+  }
+  .select-chevron{
+    position:absolute;
+    right:12px;
+    width:13px;height:13px;
+    stroke:var(--navy);
+    pointer-events:none;
+  }
+
+  .screen{
+    background:var(--paper);
+    padding:16px 16px calc(70px + max(16px, env(safe-area-inset-bottom)));
+  }
+
+  /* eyebrow */
+  .eyebrow{
+    font-family:'Space Grotesk',sans-serif;
+    font-size:11px;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    font-weight:600;
+    margin:0 2px 8px;
+  }
+
+  /* student card */
+  .student-card{
+    background:var(--card);
+    border-radius:20px;
+    border:1px solid var(--line);
+    padding:16px;
+    display:flex;
+    gap:14px;
+    align-items:center;
+    box-shadow:0 10px 24px -16px rgba(15,39,67,0.25);
+  }
+  .avatar{
+    width:64px;height:64px;border-radius:16px;
+    background:linear-gradient(150deg,#2c4d76,#173350);
+    flex:0 0 auto;
+    display:flex;align-items:center;justify-content:center;
+    color:#cfe0f0;
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:700;
+    font-size:22px;
+  }
+  .student-meta h2{
+    margin:0 0 2px;
+    font-size:17px;
+    font-weight:700;
+    color:var(--ink);
+  }
+  .student-meta p{
+    margin:0;
+    font-size:12.5px;
+    color:var(--ink-soft);
+    font-weight:500;
+  }
+  .student-meta .id-pill{
+    display:inline-block;
+    margin-top:6px;
+    font-size:10.5px;
+    font-weight:700;
+    letter-spacing:.03em;
+    color:var(--navy);
+    background:#e3ebf3;
+    padding:3px 9px;
+    border-radius:999px;
+  }
+
+  /* attendance status buttons */
+  .status-row{
+    display:grid;
+    grid-template-columns:1fr 1fr 1fr;
+    gap:8px;
+    margin-top:14px;
+  }
+  .status-btn{
+    border-radius:14px;
+    padding:12px 6px 10px;
+    text-align:center;
+    font-weight:700;
+    font-size:12.5px;
+    border:1.5px solid transparent;
+    position:relative;
+  }
+  .status-btn .dot{
+    width:7px;height:7px;border-radius:50%;
+    display:inline-block;margin-right:5px;
+  }
+  .status-btn.present{
+    background:var(--teal-soft);
+    color:#0c6b5c;
+    border-color:#bfe6dd;
+  }
+  .status-btn.present .dot{background:var(--teal);}
+  .status-btn.absent{
+    background:var(--coral-soft);
+    color:#a13f2f;
+    border-color:#f2c8bf;
+  }
+  .status-btn.absent .dot{background:var(--coral);}
+  .status-btn.excused{
+    background:var(--amber-soft);
+    color:#93630f;
+    border-color:#f0d9ab;
+  }
+  .status-btn.excused .dot{background:var(--amber);}
+  .status-btn.selected{
+    box-shadow:0 6px 14px -6px rgba(15,39,67,0.3);
+    transform:translateY(-1px);
+  }
+  .status-btn.selected::after{
+    content:"✓ đã chọn";
+    display:block;
+    font-size:9px;
+    font-weight:600;
+    letter-spacing:.03em;
+    opacity:.75;
+    margin-top:2px;
+  }
+
+  /* contact groups (Học sinh / Cha / Mẹ) */
+  .contact-groups{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    margin-top:14px;
+  }
+  .contact-group{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:16px;
+    padding:12px;
+    box-shadow:0 8px 18px -14px rgba(15,39,67,0.2);
+  }
+  .contact-group-head{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-bottom:10px;
+    padding:0 2px;
+  }
+  .contact-group-head .avatar-sm{
+    width:24px;height:24px;border-radius:8px;
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Space Grotesk',sans-serif;
+    font-size:10px;font-weight:700;color:#fff;
+    flex:0 0 auto;
+  }
+  .contact-group.student .avatar-sm{background:linear-gradient(150deg,#2c4d76,#173350);}
+  .contact-group.father .avatar-sm{background:linear-gradient(150deg,#1f9d8b,#0c6b5c);}
+  .contact-group.mother .avatar-sm{background:linear-gradient(150deg,#d8879a,#a1436a);}
+  .contact-group-head .who{
+    font-size:12.5px;
+    font-weight:700;
+    color:var(--ink);
+  }
+  .contact-group-head .who span{
+    display:block;
+    font-size:10.5px;
+    font-weight:500;
+    color:var(--ink-soft);
+    margin-top:1px;
+  }
+  .contact-row{
+    display:grid;
+    grid-template-columns:1fr 1fr 1fr;
+    gap:8px;
+  }
+  .contact-btn{
+    background:var(--paper);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:9px 6px;
+    text-align:center;
+    font-size:11.5px;
+    font-weight:600;
+    color:var(--navy);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:4px;
+  }
+  .contact-btn svg{width:16px;height:16px;stroke:var(--navy);}
+  .contact-btn.zalo svg{stroke:#1a7fd1;}
+  .contact-btn.zalo{color:#1a7fd1;}
+
+  /* stats card */
+  .section{
+    background:var(--card);
+    border-radius:18px;
+    border:1px solid var(--line);
+    margin-top:16px;
+    overflow:hidden;
+  }
+  .section-head{
+    padding:12px 16px;
+    font-size:13px;
+    font-weight:700;
+    color:var(--ink);
+    border-bottom:1px solid var(--line);
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+  }
+  .section-head .cap{
+    font-size:10px;
+    color:var(--ink-soft);
+    font-weight:600;
+    background:#eef2f6;
+    padding:3px 8px;
+    border-radius:999px;
+  }
+  .stats-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+  }
+  .stat{
+    padding:14px 16px;
+    text-align:center;
+  }
+  .stat:first-child{border-right:1px solid var(--line);}
+  .stat .num{
+    font-family:'Space Grotesk',sans-serif;
+    font-size:24px;
+    font-weight:700;
+    color:var(--navy);
+    line-height:1;
+  }
+  .stat.excused .num{color:#93630f;}
+  .stat.absent .num{color:#a13f2f;}
+  .stat .lbl{
+    margin-top:5px;
+    font-size:10.5px;
+    color:var(--ink-soft);
+    font-weight:600;
+    line-height:1.3;
+  }
+
+  /* camera attendance CTA */
+  .camera-cta{
+    margin-top:16px;
+    background:linear-gradient(135deg,var(--navy),var(--navy-deep));
+    border-radius:18px;
+    padding:14px 16px;
+    display:flex;
+    align-items:center;
+    gap:12px;
+    color:#fff;
+  }
+  .camera-cta .icon-wrap{
+    width:38px;height:38px;border-radius:11px;
+    background:rgba(255,255,255,0.14);
+    display:flex;align-items:center;justify-content:center;
+    flex:0 0 auto;
+  }
+  .camera-cta .icon-wrap svg{width:19px;height:19px;stroke:#fff;}
+  .camera-cta .txt{flex:1;}
+  .camera-cta .txt .t1{font-size:13px;font-weight:700;}
+  .camera-cta .txt .t2{font-size:10.5px;color:#c3d3e3;font-weight:500;margin-top:1px;}
+  .camera-cta .arrow{color:#c3d3e3;font-size:16px;}
+
+  /* profile info */
+  .profile-body{padding:14px 16px 16px;}
+  .info-row{
+    display:flex;
+    justify-content:space-between;
+    padding:8px 0;
+    border-bottom:1px dashed var(--line);
+    font-size:12.5px;
+  }
+  .info-row:last-child{border-bottom:none;}
+  .info-row .k{color:var(--ink-soft);font-weight:500;}
+  .info-row .v{color:var(--ink);font-weight:600;text-align:right;max-width:68%;overflow-wrap:anywhere;}
+
+
+  /* =====================================================
+     APP PAGES / BOTTOM NAVIGATION
+     Chỉ trang Điểm danh đang hoạt động.
+     4 trang còn lại để trống để bổ sung sau.
+     ===================================================== */
+  .app-page{
+    display:none;
+    min-height:100dvh;
+  }
+
+  .app-page.active-page{
+    display:block;
+  }
+
+  .app-page.blank-page{
+    min-height:100dvh;
+    background:var(--card);
+  }
+
+  .navitem{
+    cursor:pointer;
+    user-select:none;
+    -webkit-tap-highlight-color:transparent;
+  }
+
+  .navitem:active{
+    opacity:.72;
+  }
+
+  /* bottom nav */
+  .bottomnav{
+    display:flex;
+    background:var(--card);
+    border-top:1px solid var(--line);
+    padding:10px 6px max(16px, env(safe-area-inset-bottom));
+    position:fixed;
+    left:0;
+    right:0;
+    bottom:0;
+    z-index:50;
+    box-shadow:0 -6px 16px -10px rgba(5,15,28,0.25);
+  }
+  .navitem{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:4px;
+    font-size:10px;
+    font-weight:600;
+    color:var(--ink-soft);
+  }
+  .navitem svg{width:20px;height:20px;stroke:var(--ink-soft);}
+  .navitem.active{color:var(--navy);}
+  .navitem.active svg{stroke:var(--navy);}
+  .navitem.active .ring{
+    width:4px;height:4px;border-radius:50%;background:var(--teal);
+  }
+
+  /* session toggle: Sang / Chieu */
+  .session-toggle{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+    margin:0 2px 14px;
+  }
+  .session-btn{
+    background:var(--card);
+    border:1.5px solid var(--line);
+    border-radius:12px;
+    padding:10px 6px;
+    text-align:center;
+    font-size:12.5px;
+    font-weight:700;
+    color:var(--ink-soft);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+  }
+  .session-btn svg{width:15px;height:15px;stroke:var(--ink-soft);}
+  .session-btn.active{
+    background:var(--navy);
+    color:#fff;
+    border-color:var(--navy);
+    box-shadow:0 6px 14px -6px rgba(15,39,67,0.35);
+  }
+  .session-btn.active svg{stroke:#fff;}
+  .session-btn .done-pill{
+    font-size:9px;
+    font-weight:600;
+    background:rgba(255,255,255,0.18);
+    padding:1px 7px;
+    border-radius:999px;
+    margin-left:2px;
+  }
+  .session-btn:not(.active) .done-pill{
+    background:var(--teal-soft);
+    color:#0c6b5c;
+  }
+  .session-hint{
+    text-align:center;
+    font-size:10px;
+    color:var(--ink-soft);
+    font-weight:500;
+    margin:-6px 2px 14px;
+    line-height:1.4;
+  }
+
+  /* attendance date picker */
+  .date-picker-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:10px 12px;
+    margin:0 2px 12px;
+    box-shadow:0 8px 18px -14px rgba(15,39,67,0.2);
+  }
+  .date-info{
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+  }
+  .date-badge{
+    font-size:9.5px;
+    font-weight:700;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    color:#0c6b5c;
+    background:var(--teal-soft);
+    padding:2px 8px;
+    border-radius:999px;
+    width:fit-content;
+  }
+  .date-badge.makeup{
+    color:#93630f;
+    background:var(--amber-soft);
+  }
+  .date-value{
+    font-size:13.5px;
+    font-weight:700;
+    color:var(--ink);
+  }
+  .date-input-wrap{
+    position:relative;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    width:36px;height:36px;
+    border-radius:10px;
+    background:var(--paper);
+    border:1px solid var(--line);
+    flex:0 0 auto;
+  }
+  .date-input-wrap svg{
+    width:16px;height:16px;
+    stroke:var(--navy);
+    pointer-events:none;
+  }
+  .date-input{
+    position:absolute;
+    inset:0;
+    width:100%;height:100%;
+    opacity:0;
+    border:0;
+    cursor:pointer;
+  }
+
+  .caption{
+    text-align:center;
+    font-family:'Space Grotesk',sans-serif;
+    font-size:12px;
+    color:var(--ink-soft);
+    margin-top:16px;
+    letter-spacing:.02em;
+  }
+
+  /* =====================================================
+     FULLSCREEN WEB APP
+     Bỏ hoàn toàn khung giả điện thoại và nền bên ngoài
+     ===================================================== */
+  html,
+  body{
+    margin:0 !important;
+    padding:0 !important;
+    width:100% !important;
+    min-width:100% !important;
+    min-height:100vh !important;
+    min-height:100dvh !important;
+    background:var(--paper) !important;
+    display:block !important;
+    overflow-x:hidden !important;
+  }
+
+  body > div{
+    width:100% !important;
+    max-width:none !important;
+    margin:0 !important;
+    padding:0 !important;
+  }
+
+  .device{
+    width:100% !important;
+    max-width:none !important;
+    min-height:100vh !important;
+    min-height:100dvh !important;
+    margin:0 !important;
+    padding:0 !important;
+    border:0 !important;
+    border-radius:0 !important;
+    box-shadow:none !important;
+    background:var(--paper) !important;
+    overflow:visible !important;
+    position:relative !important;
+  }
+
+  .notch{
+    display:none !important;
+  }
+
+  .caption{
+    display:none !important;
+  }
+
+  .tabbar{
+    margin:0 !important;
+    border-radius:0 !important;
+  }
+
+  .tabbar-top{
+    padding-top:max(14px, env(safe-area-inset-top)) !important;
+    position:fixed !important;
+    top:0 !important;
+    left:0 !important;
+    right:0 !important;
+    z-index:50 !important;
+  }
+
+  @media (max-width: 767px){
+    .screen{
+      padding-left:16px !important;
+      padding-right:16px !important;
+    }
+  }
+
+  @media (min-width: 768px){
+    .tabbar-top{
+      padding:18px 24px 16px !important;
+    }
+
+    .tabbar{
+      padding-top:68px !important;
+    }
+
+    .filter-stack{
+      padding:0 24px 18px !important;
+      display:grid !important;
+      grid-template-columns:1fr 1fr 1fr !important;
+      gap:12px !important;
+    }
+
+    .screen{
+      padding:20px 24px calc(78px + max(16px, env(safe-area-inset-bottom))) !important;
+    }
+  }
+
+
+  /* Vuốt ngang để chuyển học sinh; vẫn cho phép cuộn dọc bình thường */
+  .screen{
+    touch-action:pan-y;
+  }
+
+  .student-card{
+    transition:transform .18s ease, opacity .18s ease;
+    will-change:transform, opacity;
+  }
+
+  .student-card.swipe-out-left{
+    transform:translateX(-35px);
+    opacity:.25;
+  }
+
+  .student-card.swipe-out-right{
+    transform:translateX(35px);
+    opacity:.25;
+  }
+
+  .student-card.swipe-in{
+    transform:translateX(0);
+    opacity:1;
+  }
+
+  .message-sheet-overlay{
+    position:fixed;
+    inset:0;
+    z-index:1000;
+    display:none;
+    align-items:flex-end;
+    justify-content:center;
+    padding:16px 16px max(16px, env(safe-area-inset-bottom));
+    background:rgba(15,39,67,.42);
+  }
+  .message-sheet-overlay.show{display:flex;}
+  .message-sheet{
+    width:min(100%,420px);
+    background:var(--card);
+    border-radius:20px;
+    padding:16px;
+    box-shadow:0 20px 50px rgba(15,39,67,.28);
+  }
+  .message-sheet-title{
+    text-align:center;
+    font-size:14px;
+    font-weight:700;
+    color:var(--ink);
+    margin-bottom:12px;
+  }
+  .message-choice{
+    width:100%;
+    border:1px solid var(--line);
+    border-radius:13px;
+    padding:13px;
+    margin-top:8px;
+    background:var(--paper);
+    color:var(--navy);
+    font:600 13px 'Be Vietnam Pro',sans-serif;
+  }
+  .message-choice.zalo-choice{color:#087bd3;}
+  .message-choice.cancel-choice{background:transparent;color:var(--ink-soft);}
+
+
+  .subject-profile-body{
+    margin-top:0;
+  }
+  .subject-profile-body .info-row{
+    min-height:34px;
+  }
+
+  /* =====================================================
+     CÀI ĐẶT / ĐĂNG KÝ KHUÔN MẶT
+     ===================================================== */
+  .face-settings{
+    min-height:100dvh;
+    background:var(--paper);
+    padding:82px 16px calc(78px + env(safe-area-inset-bottom));
+  }
+  .face-settings-header{
+    position:fixed;top:0;left:0;right:0;z-index:45;
+    background:var(--navy-deep);color:#fff;
+    padding:max(16px,env(safe-area-inset-top)) 18px 15px;
+    font:700 15px 'Space Grotesk',sans-serif;
+    letter-spacing:.04em;
+  }
+  .face-panel{background:#fff;border:1px solid var(--line);border-radius:18px;padding:15px;margin-bottom:12px;}
+  .face-panel-title{font-size:14px;font-weight:800;color:var(--ink);margin-bottom:5px;}
+  .face-panel-note{font-size:11px;line-height:1.55;color:var(--ink-soft);margin-bottom:12px;}
+  .face-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:12px;}
+  .face-summary-item{background:var(--paper);border-radius:12px;padding:9px 5px;text-align:center;}
+  .face-summary-item b{display:block;color:var(--navy);font-size:18px;}
+  .face-summary-item span{font-size:9px;color:var(--ink-soft);}
+  .face-list{display:flex;flex-direction:column;gap:8px;margin-top:12px;}
+  .face-student-row{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:14px;padding:10px;background:#fff;}
+  .face-student-avatar{width:44px;height:44px;border-radius:12px;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;overflow:hidden;flex:0 0 auto;}
+  .face-student-avatar img,.avatar img{width:100%;height:100%;object-fit:cover;display:block;}
+  .face-student-info{min-width:0;flex:1;}
+  .face-student-name{font-size:12px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .face-student-status{font-size:9.5px;color:var(--ink-soft);margin-top:3px;}
+  .face-register-btn{border:0;border-radius:10px;padding:8px 9px;background:var(--teal-soft);color:#087969;font:700 10px 'Be Vietnam Pro',sans-serif;}
+  .face-register-btn.update{background:var(--amber-soft);color:#9a5b0b;}
+  .face-empty{text-align:center;color:var(--ink-soft);font-size:12px;padding:24px 8px;}
+
+  .face-capture-overlay{position:fixed;inset:0;z-index:2000;background:#071727;display:none;flex-direction:column;color:#fff;}
+  .face-capture-overlay.show{display:flex;}
+  .face-capture-head{padding:max(14px,env(safe-area-inset-top)) 14px 10px;display:flex;align-items:center;gap:10px;}
+  .face-close-btn{width:36px;height:36px;border:1px solid rgba(255,255,255,.18);border-radius:11px;background:rgba(255,255,255,.08);color:#fff;font-size:20px;}
+  .face-capture-title{font-size:13px;font-weight:700;min-width:0;}
+  .face-camera-wrap{position:relative;flex:1;min-height:250px;background:#02080e;overflow:hidden;display:flex;align-items:center;justify-content:center;}
+  #faceVideo{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);}
+  .face-guide{position:absolute;width:62%;max-width:270px;aspect-ratio:3/4;border:3px solid rgba(255,255,255,.8);border-radius:48% 48% 44% 44%;box-shadow:0 0 0 999px rgba(0,0,0,.25);pointer-events:none;}
+  .face-capture-controls{padding:14px 16px calc(16px + env(safe-area-inset-bottom));background:#0c2035;}
+  .face-instruction{text-align:center;font-size:13px;font-weight:700;min-height:40px;}
+  .face-progress{display:flex;justify-content:center;gap:8px;margin:8px 0 13px;}
+  .face-progress-dot{width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;font-size:9px;}
+  .face-progress-dot.done{background:var(--teal);}
+  .face-capture-message{text-align:center;font-size:10px;color:#c9d7e5;min-height:20px;margin-bottom:8px;}
+  .face-action-row{display:grid;grid-template-columns:1fr 1fr;gap:9px;}
+  .face-action{border:0;border-radius:13px;padding:12px 8px;font:700 12px 'Be Vietnam Pro',sans-serif;}
+  .face-action.capture{background:#fff;color:var(--navy-deep);}
+  .face-action.save{background:var(--teal);color:#fff;}
+  .face-action:disabled{opacity:.42;}
+
+</style>
+</head>
+<body>
+
+<div>
+  <div class="device">
+
+    <div id="pageAttendance" class="app-page active-page">
+      <div class="tabbar-top">
+        <div class="tabbar-title">WebAPP Điểm Danh</div>
+      <div class="camera-icon-btn">
+        <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      </div>
+    </div>
+
+    <div class="tabbar">
+      <div class="filter-stack">
+        <div class="select-wrap">
+          <svg class="select-icon" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <select class="filter-select" id="teacherSelect">
+            <option value="">Đang tải giáo viên...</option>
+          </select>   
+          <svg class="select-chevron" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </div>
+
+        <div class="select-wrap">
+          <svg class="select-icon" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5-10-5z"/><path d="M6 12v5c0 1.66 2.69 3 6 3s6-1.34 6-3v-5"/></svg>
+          <select class="filter-select" id="classSelect">
+            <option value="">Đang tải lớp...</option>
+          </select>
+          <svg class="select-chevron" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </div>
+
+        <div class="select-wrap">
+          <svg class="select-icon" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          <select class="filter-select" id="subjectSelect">
+            <option value="">Đang tải môn học...</option>
+          </select>
+          <svg class="select-chevron" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+
+      <div class="session-toggle">
+        <div class="session-btn active">
+          <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+          Buổi sáng
+        </div>
+        <div class="session-btn">
+          <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          Buổi chiều
+        </div>
+      </div>
+      <div class="session-hint">
+        Tự động chọn theo giờ hệ thống · chạm để đổi buổi nếu cần điểm danh bù
+      </div>
+
+      <div class="eyebrow">Hồ sơ học sinh</div>
+
+      <div class="student-card" id="studentCard">
+        <div class="avatar" id="studentAvatar">--</div>
+        <div class="student-meta">
+          <h2 id="studentName">Chọn lớp để tải học sinh</h2>
+          <p id="studentMeta">—</p>
+          <span class="id-pill" id="studentId">—</span>
+        </div>
+      </div>
+
+      <div class="date-picker-row">
+        <div class="date-info">
+          <span class="date-badge" id="dateBadge">Hôm nay</span>
+          <span class="date-value" id="dateValueText">—</span>
+        </div>
+        <div class="date-input-wrap">
+          <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          <input type="date" class="date-input" id="attendanceDate">
+        </div>
+      </div>
+
+      <div class="status-row">
+        <div class="status-btn present" data-status="PRESENT"><span class="dot"></span>Có mặt</div>
+        <div class="status-btn absent" data-status="ABSENT"><span class="dot"></span>Vắng</div>
+        <div class="status-btn excused" data-status="EXCUSED"><span class="dot"></span>Có phép</div>
+      </div>
+      <div id="attendanceStatus" style="text-align:center;margin-top:8px;font-size:10.5px;color:var(--ink-soft);font-weight:600;">
+        Chưa điểm danh
+      </div>
+
+      <div class="contact-groups">
+
+        <div class="contact-group student">
+          <div class="contact-group-head">
+            <div class="avatar-sm">HS</div>
+            <div class="who">Học sinh<span id="contactStudentName">—</span></div>
+          </div>
+          <div class="contact-row">
+            <div class="contact-btn">
+              <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+              Gọi điện
+            </div>
+            <div class="contact-btn zalo">
+              <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+              Zalo
+            </div>
+            <div class="contact-btn">
+              <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+              Tin nhắn
+            </div>
+          </div>
+        </div>
+
+        <div class="contact-group father">
+          <div class="contact-group-head">
+            <div class="avatar-sm">CH</div>
+            <div class="who">Cha<span id="contactFatherName">—</span></div>
+          </div>
+          <div class="contact-row">
+            <div class="contact-btn">
+              <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+              Gọi điện
+            </div>
+            <div class="contact-btn zalo">
+              <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+              Zalo
+            </div>
+            <div class="contact-btn">
+              <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+              Tin nhắn
+            </div>
+          </div>
+        </div>
+
+        <div class="contact-group mother">
+          <div class="contact-group-head">
+            <div class="avatar-sm">ME</div>
+            <div class="who">Mẹ<span id="contactMotherName">—</span></div>
+          </div>
+          <div class="contact-row">
+            <div class="contact-btn">
+              <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+              Gọi điện
+            </div>
+            <div class="contact-btn zalo">
+              <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+              Zalo
+            </div>
+            <div class="contact-btn">
+              <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+              Tin nhắn
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          Thông tin môn học
+        </div>
+        <div class="profile-body subject-profile-body">
+          <div class="info-row"><span class="k">Tên môn học</span><span class="v" id="subjectInfoName">—</span></div>
+          <div class="info-row"><span class="k">Học kỳ</span><span class="v" id="subjectInfoHocKy">—</span></div>
+          <div class="info-row"><span class="k">Tổng số giờ</span><span class="v" id="subjectInfoTongSoGio">—</span></div>
+          <div class="info-row"><span class="k">Lý thuyết</span><span class="v" id="subjectInfoDanhSachMH">—</span></div>
+          <div class="info-row"><span class="k">Thực hành</span><span class="v" id="subjectInfoThucHanh">—</span></div>
+          <div class="info-row"><span class="k">Thi</span><span class="v" id="subjectInfoThi">—</span></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          <span id="absenceStatsTitle">Thống kê tháng: — buổi</span>
+          <span class="cap" id="absenceStatsSubject">Chọn môn học</span>
+        </div>
+        <div class="stats-grid">
+          <div class="stat excused">
+            <div class="num" id="excusedAbsenceCount">—</div>
+            <div class="lbl" id="excusedAbsenceLabel">Buổi vắng có phép - — giờ</div>
+          </div>
+          <div class="stat absent">
+            <div class="num" id="unexcusedAbsenceCount">—</div>
+            <div class="lbl" id="unexcusedAbsenceLabel">Buổi vắng không phép - — giờ</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          Thông tin lý lịch học sinh
+        </div>
+        <div class="profile-body">
+          <div class="info-row"><span class="k">Ngày sinh</span><span class="v" id="profileBirthDate">—</span></div>
+          <div class="info-row"><span class="k">CCCD</span><span class="v" id="profileCCCD">—</span></div>
+          <div class="info-row"><span class="k">BHYT</span><span class="v" id="profileBHYT">—</span></div>
+          <div class="info-row"><span class="k">Cha</span><span class="v" id="profileFather">—</span></div>
+          <div class="info-row"><span class="k">Mẹ</span><span class="v" id="profileMother">—</span></div>
+          <div class="info-row"><span class="k">Địa chỉ</span><span class="v" id="profileAddress">—</span></div>
+          <div class="info-row"><span class="k">Ghi chú</span><span class="v" id="profileNote">—</span></div>
+        </div>
+      </div>
+
+    </div>
+
+    </div>
+
+    <div id="pageSettings" class="app-page blank-page" aria-hidden="true">
+      <div class="face-settings">
+        <div class="face-settings-header">Cài đặt · Khuôn mặt học sinh</div>
+        <div class="face-panel">
+          <div class="face-panel-title">Quản lý đăng ký khuôn mặt</div>
+          <div class="face-panel-note">Chọn lớp, sau đó đăng ký lần lượt 5 mẫu khuôn mặt cho từng học sinh. Dữ liệu được lưu vào DanhSachHS của lớp.</div>
+          <div class="select-wrap">
+            <select class="filter-select" id="faceClassSelect">
+              <option value="">Đang tải danh sách lớp...</option>
+            </select>
+            <svg class="select-chevron" fill="none" viewBox="0 0 24 24" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+          </div>
+          <div class="face-summary">
+            <div class="face-summary-item"><b id="faceTotalCount">—</b><span>Tổng số</span></div>
+            <div class="face-summary-item"><b id="faceRegisteredCount">—</b><span>Đã đăng ký</span></div>
+            <div class="face-summary-item"><b id="facePendingCount">—</b><span>Chưa đăng ký</span></div>
+          </div>
+        </div>
+        <div class="face-panel">
+          <div class="face-panel-title">Danh sách học sinh</div>
+          <div class="face-list" id="faceStudentList">
+            <div class="face-empty">Chọn lớp để tải danh sách học sinh.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="pageStats" class="app-page blank-page" aria-hidden="true"></div>
+    <div id="pageScores" class="app-page blank-page" aria-hidden="true"></div>
+    <div id="pageTraining" class="app-page blank-page" aria-hidden="true"></div>
+
+    <div class="bottomnav" id="bottomNav">
+      <div class="navitem" data-page="pageSettings">
+        <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Cài đặt
+      </div>
+      <div class="navitem active" data-page="pageAttendance">
+        <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
+        Điểm danh
+        <span class="ring"></span>
+      </div>
+      <div class="navitem" data-page="pageStats">
+        <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+        Thống kê
+      </div>
+      <div class="navitem" data-page="pageScores">
+        <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
+        Điểm
+      </div>
+      <div class="navitem" data-page="pageTraining">
+        <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+        Rèn luyện
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<div class="message-sheet-overlay" id="messageChoiceOverlay">
+  <div class="message-sheet" role="dialog" aria-modal="true" aria-labelledby="messageChoiceTitle">
+    <div class="message-sheet-title" id="messageChoiceTitle">Chọn cách nhắn tin</div>
+    <button type="button" class="message-choice zalo-choice" id="messageByZalo">Nhắn qua Zalo</button>
+    <button type="button" class="message-choice" id="messageBySms">Nhắn bằng SMS</button>
+    <button type="button" class="message-choice cancel-choice" id="cancelMessageChoice">Hủy</button>
+  </div>
+</div>
+
+<!-- Màn hình toàn trang dùng để đăng ký 5 mẫu khuôn mặt cho một học sinh. -->
+<div class="face-capture-overlay" id="faceCaptureOverlay">
+  <div class="face-capture-head">
+    <button type="button" class="face-close-btn" id="faceCloseButton" aria-label="Đóng">×</button>
+    <div class="face-capture-title" id="faceCaptureTitle">Đăng ký khuôn mặt</div>
+  </div>
+  <div class="face-camera-wrap">
+    <video id="faceVideo" autoplay muted playsinline></video>
+    <div class="face-guide"></div>
+    <canvas id="faceCaptureCanvas" hidden></canvas>
+  </div>
+  <div class="face-capture-controls">
+    <div class="face-instruction" id="faceInstruction">Đưa khuôn mặt vào giữa khung</div>
+    <div class="face-progress" id="faceProgress"></div>
+    <div class="face-capture-message" id="faceCaptureMessage">Camera chưa khởi động</div>
+    <div class="face-action-row">
+      <button type="button" class="face-action capture" id="faceCaptureButton">Chụp mẫu</button>
+      <button type="button" class="face-action save" id="faceSaveButton" disabled>Lưu đăng ký</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  /* KHỐI 1: đặt ngày hôm nay và hiển thị "Hôm nay" hoặc "Điểm danh bù". */
+  (function(){
+    var input = document.getElementById('attendanceDate');
+    var badge = document.getElementById('dateBadge');
+    var valueText = document.getElementById('dateValueText');
+    var weekdays = ['Chủ nhật','Thứ Hai','Thứ Ba','Thứ Tư','Thứ Năm','Thứ Sáu','Thứ Bảy'];
+
+    function toLocalISO(d){
+      var tzOffset = d.getTimezoneOffset() * 60000;
+      return new Date(d - tzOffset).toISOString().slice(0,10);
+    }
+
+    function render(){
+      var picked = new Date(input.value + 'T00:00:00');
+      var todayISO = toLocalISO(new Date());
+      var isToday = input.value === todayISO;
+
+      var dd = String(picked.getDate()).padStart(2,'0');
+      var mm = String(picked.getMonth()+1).padStart(2,'0');
+      var yyyy = picked.getFullYear();
+      valueText.textContent = weekdays[picked.getDay()] + ', ' + dd + '/' + mm + '/' + yyyy;
+
+      if(isToday){
+        badge.textContent = 'Hôm nay';
+        badge.classList.remove('makeup');
+      } else {
+        badge.textContent = 'Điểm danh bù';
+        badge.classList.add('makeup');
+      }
+    }
+
+    var todayISO = toLocalISO(new Date());
+    input.value = todayISO;
+    input.max = todayISO;
+    render();
+    input.addEventListener('change', function(){
+      if(!input.value){ input.value = todayISO; }
+      render();
+    });
+  })();
+</script>
+
+<script>
+/*
+ * KHỐI 2: dữ liệu và chức năng chính của giao diện.
+ * google.script.run là cầu nối từ Index.html sang các hàm trong Code.gs.
+ */
+let students = [];
+let currentStudentIndex = 0;
+let currentClassName = '';
+let loadingRequest = 0;
+let pointerStartX = 0;
+let pointerStartY = 0;
+let pointerTracking = false;
+// localStorage chỉ tồn tại trên đúng trình duyệt của thiết bị đang sử dụng.
+// Vì vậy lựa chọn trên điện thoại GV1 không ảnh hưởng điện thoại GV2, GV3...
+const STORAGE_DEFAULT_TEACHER = 'attendance_default_teacher';
+const STORAGE_DEFAULT_CLASS = 'attendance_default_class';
+const STORAGE_SUBJECT_PREFIX = 'attendance_default_subject_';
+
+let subjectDetails = [];
+
+// Dữ liệu tạm của màn hình đăng ký khuôn mặt.
+let faceRegistrationStudents = [];
+let faceRegistrationClass = '';
+let faceRegistrationStudent = null;
+let faceCapturedVectors = [];
+let facePortraitDataUrl = '';
+let faceCameraStream = null;
+let faceModelsPromise = null;
+let faceCaptureBusy = false;
+const FACE_MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights';
+// camera.html đang nằm trong repository NPHH/WebAPP, thư mục "He Thong Diem Danh".
+const EXTERNAL_CAMERA_URL = 'https://nphh.github.io/WebAPP/He%20Thong%20Diem%20Danh/camera.html';
+const EXTERNAL_CAMERA_ORIGIN = 'https://nphh.github.io';
+let externalCameraToken = '';
+let externalCameraWindow = null;
+const FACE_INSTRUCTIONS = [
+  'Mẫu 1/5 · Nhìn thẳng vào camera',
+  'Mẫu 2/5 · Quay nhẹ sang trái',
+  'Mẫu 3/5 · Quay nhẹ sang phải',
+  'Mẫu 4/5 · Hơi ngẩng mặt',
+  'Mẫu 5/5 · Hơi cúi mặt'
+];
+
+function normalizeSubjectText(value) {
+  return String(value || '').trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd').replace(/\s+/g, ' ');
+}
+
+function clearSubjectInfo() {
+  setText('subjectInfoName', '—');
+  setText('subjectInfoHocKy', '—');
+  setText('subjectInfoTongSoGio', '—');
+  setText('subjectInfoDanhSachMH', '—');
+  setText('subjectInfoThucHanh', '—');
+  setText('subjectInfoThi', '—');
+}
+
+function updateSubjectInfo() {
+  const select = document.getElementById('subjectSelect');
+  const selectedName = select ? String(select.value || '').trim() : '';
+
+  if (!selectedName || !Array.isArray(subjectDetails)) {
+    clearSubjectInfo();
+    return;
+  }
+
+  const wanted = normalizeSubjectText(selectedName);
+  const info = subjectDetails.find(function(item) {
+    return normalizeSubjectText(item.TenMH) === wanted;
+  });
+
+  if (!info) {
+    clearSubjectInfo();
+    setText('subjectInfoName', selectedName);
+    return;
+  }
+
+  setText('subjectInfoName', info.TenMH || selectedName);
+  setText('subjectInfoHocKy', info.HocKy || '—');
+  setText('subjectInfoTongSoGio', info.TongSoGio || '—');
+  setText('subjectInfoDanhSachMH', info.DanhSachMH || '—');
+  setText('subjectInfoThucHanh', info.ThucHanh || '—');
+  setText('subjectInfoThi', info.Thi || '—');
+}
+
+
+
+/** Tải danh sách lớp và giáo viên khi WebApp vừa mở. */
+function loadAppConfig() {
+  google.script.run
+    .withSuccessHandler(function(config) {
+      const classes = config.classes || [];
+      fillSelect('classSelect', classes, 'Chọn lớp');
+      fillSelect('teacherSelect', config.teachers || [], 'Chọn giáo viên');
+      fillSelect('faceClassSelect', classes, 'Chọn lớp để đăng ký');
+
+      document.getElementById('classSelect').addEventListener('change', function() {
+        if (this.value) localStorage.setItem(STORAGE_DEFAULT_CLASS, this.value);
+        loadSelectedClass();
+      });
+      document.getElementById('teacherSelect').addEventListener('change', function() {
+        if (this.value) localStorage.setItem(STORAGE_DEFAULT_TEACHER, this.value);
+      });
+      document.getElementById('subjectSelect').addEventListener('change', function() {
+        const className = document.getElementById('classSelect').value;
+        if (className && this.value) {
+          localStorage.setItem(STORAGE_SUBJECT_PREFIX + className, this.value);
+        }
+        updateSubjectInfo();
+        loadAbsenceStats();
+      });
+      document.getElementById('faceClassSelect').addEventListener('change', function() {
+        if (this.value) localStorage.setItem(STORAGE_DEFAULT_CLASS, this.value);
+        loadFaceRegistrationClass();
+      });
+
+      setupStudentSwipe();
+      setSelectWaiting('subjectSelect', 'Chọn lớp trước');
+      restoreLastSelections();
+      restoreSelectValue('faceClassSelect', localStorage.getItem(STORAGE_DEFAULT_CLASS));
+
+      // Nếu thiết bị đã nhớ một lớp hợp lệ thì tự tải lớp đó ngay khi mở WebApp.
+      if (document.getElementById('classSelect').value) {
+        loadSelectedClass();
+      } else {
+        showNoStudent(classes.length ? 'Chọn lớp để tải học sinh' : 'Chưa có lớp được cấu hình');
+      }
+    })
+    .withFailureHandler(function(error) {
+      showNoStudent('Không tải được danh sách lớp');
+      alert('Không tải được dữ liệu:\n' + getErrorMessage(error));
+    })
+    .getAppConfig();
+}
+
+/** Tải môn học và danh sách học sinh khi người dùng chọn lớp. */
+function loadSelectedClass() {
+  const className = document.getElementById('classSelect').value;
+  const requestId = ++loadingRequest;
+  currentClassName = className;
+  students = [];
+  currentStudentIndex = 0;
+
+  if (!className) {
+    setSelectWaiting('subjectSelect', 'Chọn lớp trước');
+    showNoStudent('Chọn lớp để tải học sinh');
+    return;
+  }
+
+  setSelectWaiting('subjectSelect', 'Đang tải môn học...');
+  showNoStudent('Đang tải dữ liệu lớp ' + className + '...');
+
+  google.script.run
+    .withSuccessHandler(function(data) {
+      if (requestId !== loadingRequest) return;
+      fillSelect('subjectSelect', data.subjects || [], 'Chọn môn học');
+      subjectDetails = Array.isArray(data.subjectDetails) ? data.subjectDetails : [];
+      restoreLastSubject(className);
+      updateSubjectInfo();
+      students = Array.isArray(data.students) ? data.students : [];
+      currentStudentIndex = 0;
+      if (!students.length) {
+        showNoStudent('Không có học sinh trong lớp ' + className);
+        return;
+      }
+      showStudent(0);
+    })
+    .withFailureHandler(function(error) {
+      if (requestId !== loadingRequest) return;
+      students = [];
+      currentStudentIndex = 0;
+      showNoStudent('Lỗi tải dữ liệu lớp ' + className);
+      alert('Không tải được lớp ' + className + ':\n' + getErrorMessage(error));
+    })
+    .getClassData(className);
+}
+
+/** Hiển thị hồ sơ một học sinh theo vị trí trong danh sách. */
+function showStudent(index, direction) {
+  if (!students.length) return;
+  index = Math.max(0, Math.min(index, students.length - 1));
+  const student = students[index];
+  currentStudentIndex = index;
+
+  animateStudentCard(direction, function() {
+    setText('studentName', student.HoVaTen || 'Chưa có tên');
+    setText('studentMeta', 'Lớp ' + (student.Lop || currentClassName || '—') +
+      ' · Số thứ tự ' + (student.STT || (index + 1)) +
+      ' · ' + (index + 1) + '/' + students.length);
+    setText('studentId', student.MSSV || '—');
+    setText('studentAvatar', makeInitials(student.HoVaTen));
+    setText('contactStudentName', student.HoVaTen || '—');
+    setText('contactFatherName', student.TenCha || '—');
+    setText('contactMotherName', student.TenMe || '—');
+    setText('profileBirthDate', student.NgaySinh || '—');
+    setText('profileCCCD', student.CCCD || '—');
+    setText('profileBHYT', student.BHYT || '—');
+    setText('profileFather', formatParentInfo(student.TenCha, student.SDT_Cha));
+    setText('profileMother', formatParentInfo(student.TenMe, student.SDT_Me));
+    setText('profileAddress', student.DiaChi || '—');
+    setText('profileNote', student.GhiChu || 'Không có');
+    updateContactButtons('.contact-group.student', student.SDT_HS);
+    updateContactButtons('.contact-group.father', student.SDT_Cha);
+    updateContactButtons('.contact-group.mother', student.SDT_Me);
+    clearAttendanceSelection();
+    setAttendanceMessage('Chưa điểm danh');
+    loadAbsenceStats();
+  });
+}
+
+function nextStudent() {
+  if (students.length && currentStudentIndex < students.length - 1) {
+    showStudent(currentStudentIndex + 1, 'left');
+  }
+}
+function previousStudent() {
+  if (students.length && currentStudentIndex > 0) {
+    showStudent(currentStudentIndex - 1, 'right');
+  }
+}
+
+/** Cho phép vuốt hoặc dùng phím mũi tên để chuyển học sinh. */
+function setupStudentSwipe() {
+  const screen = document.querySelector('.screen');
+  if (!screen || screen.dataset.swipeReady === '1') return;
+  screen.dataset.swipeReady = '1';
+
+  screen.addEventListener('pointerdown', function(event) {
+    if (event.target.closest('input, select, a, button, .status-btn, .session-btn, .contact-btn')) {
+      pointerTracking = false;
+      return;
+    }
+    pointerStartX = event.clientX;
+    pointerStartY = event.clientY;
+    pointerTracking = true;
+  });
+  screen.addEventListener('pointerup', function(event) {
+    if (!pointerTracking) return;
+    pointerTracking = false;
+    const dx = event.clientX - pointerStartX;
+    const dy = event.clientY - pointerStartY;
+    if (Math.abs(dx) < 60 || Math.abs(dx) <= Math.abs(dy) * 1.2) return;
+    if (dx < 0) nextStudent(); else previousStudent();
+  });
+  screen.addEventListener('pointercancel', function() { pointerTracking = false; });
+  document.addEventListener('keydown', function(event) {
+    if (event.key === 'ArrowRight') nextStudent();
+    if (event.key === 'ArrowLeft') previousStudent();
+  });
+}
+
+function animateStudentCard(direction, updateFunction) {
+  const card = document.getElementById('studentCard');
+  if (!card) { updateFunction(); return; }
+  card.classList.remove('swipe-out-left', 'swipe-out-right', 'swipe-in');
+  if (!direction) { updateFunction(); card.classList.add('swipe-in'); return; }
+  card.classList.add(direction === 'left' ? 'swipe-out-left' : 'swipe-out-right');
+  setTimeout(function() {
+    updateFunction();
+    card.classList.remove('swipe-out-left', 'swipe-out-right');
+    card.classList.add('swipe-in');
+  }, 130);
+}
+
+/** Gắn thao tác cho nút buổi học, trạng thái và ô ngày. */
+function setupInterfaceActions() {
+  const sessionButtons = document.querySelectorAll('.session-btn');
+  sessionButtons.forEach(function(button) {
+    button.addEventListener('click', function() {
+      sessionButtons.forEach(function(item) { item.classList.remove('active'); });
+      button.classList.add('active');
+    });
+  });
+  const automaticIndex = new Date().getHours() < 12 ? 0 : 1;
+  sessionButtons.forEach(function(item) { item.classList.remove('active'); });
+  if (sessionButtons[automaticIndex]) sessionButtons[automaticIndex].classList.add('active');
+
+  document.querySelectorAll('.status-btn').forEach(function(button) {
+    button.addEventListener('click', function() {
+      if (!students.length) return;
+      submitAttendance(button);
+    });
+  });
+
+  const attendanceDate = document.getElementById('attendanceDate');
+  if (attendanceDate) attendanceDate.addEventListener('change', loadAbsenceStats);
+}
+
+let attendanceSaving = false;
+let absenceStatsRequest = 0;
+
+/**
+ * Tải số buổi vắng theo học sinh, tháng và môn đang chọn.
+ * Hiện tại 1 buổi được quy đổi thành 4 giờ ở phần kết quả bên dưới.
+ */
+function loadAbsenceStats() {
+  const requestId = ++absenceStatsRequest;
+  const dateInput = document.getElementById('attendanceDate');
+  const subjectSelect = document.getElementById('subjectSelect');
+  const title = document.getElementById('absenceStatsTitle');
+  const subjectLabel = document.getElementById('absenceStatsSubject');
+  const excusedElement = document.getElementById('excusedAbsenceCount');
+  const excusedLabel = document.getElementById('excusedAbsenceLabel');
+  const absentElement = document.getElementById('unexcusedAbsenceCount');
+  const absentLabel = document.getElementById('unexcusedAbsenceLabel');
+
+  if (!dateInput || !dateInput.value || !subjectSelect || !subjectSelect.value || !students.length) {
+    if (title && dateInput && dateInput.value) {
+      title.textContent = 'Thống kê tháng ' + Number(dateInput.value.split('-')[1]) + ': — buổi';
+    }
+    if (subjectLabel) subjectLabel.textContent = subjectSelect && subjectSelect.value ? subjectSelect.value : 'Chọn môn học';
+    if (excusedElement) excusedElement.textContent = '—';
+    if (excusedLabel) excusedLabel.textContent = 'Buổi vắng có phép - — giờ';
+    if (absentElement) absentElement.textContent = '—';
+    if (absentLabel) absentLabel.textContent = 'Buổi vắng không phép - — giờ';
+    return;
+  }
+
+  const student = students[currentStudentIndex];
+  title.textContent = 'Thống kê tháng ' + Number(dateInput.value.split('-')[1]) + ': — buổi';
+  subjectLabel.textContent = subjectSelect.value;
+  excusedElement.textContent = '…';
+  absentElement.textContent = '…';
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (requestId !== absenceStatsRequest) return;
+      title.textContent = 'Thống kê tháng ' + result.month + ': ' +
+        (Number(result.excused) + Number(result.absent)) + ' buổi';
+      subjectLabel.textContent = result.subject;
+      excusedElement.textContent = result.excused;
+      excusedLabel.textContent = 'Buổi vắng có phép - ' + (Number(result.excused) * 4) + ' giờ';
+      absentElement.textContent = result.absent;
+      absentLabel.textContent = 'Buổi vắng không phép - ' + (Number(result.absent) * 4) + ' giờ';
+    })
+    .withFailureHandler(function(error) {
+      if (requestId !== absenceStatsRequest) return;
+      excusedElement.textContent = '—';
+      excusedLabel.textContent = 'Buổi vắng có phép - — giờ';
+      absentElement.textContent = '—';
+      absentLabel.textContent = 'Buổi vắng không phép - — giờ';
+      subjectLabel.textContent = 'Không tải được';
+      console.error(getErrorMessage(error));
+    })
+    .getAbsenceStats({
+      className: document.getElementById('classSelect').value,
+      studentSTT: student.STT,
+      studentName: student.HoVaTen,
+      attendanceDate: dateInput.value,
+      subject: subjectSelect.value
+    });
+}
+
+/** Gửi một lần điểm danh sang Code.gs để ghi vào đúng ô Google Sheets. */
+function submitAttendance(button) {
+  if (attendanceSaving || !students.length) return;
+
+  const student = students[currentStudentIndex];
+  const dateInput = document.getElementById('attendanceDate');
+  const classSelect = document.getElementById('classSelect');
+  const teacherSelect = document.getElementById('teacherSelect');
+  const subjectSelect = document.getElementById('subjectSelect');
+  const activeSession = document.querySelector('.session-btn.active');
+  const sessionButtons = Array.from(document.querySelectorAll('.session-btn'));
+  const session = sessionButtons.indexOf(activeSession) === 1 ? 'C' : 'S';
+
+  if (!dateInput || !dateInput.value) {
+    alert('Chưa chọn ngày điểm danh.');
+    return;
+  }
+
+  const payload = {
+    className: classSelect.value,
+    studentSTT: student.STT,
+    studentName: student.HoVaTen,
+    attendanceDate: dateInput.value,
+    session: session,
+    status: button.dataset.status,
+    teacher: teacherSelect.value,
+    subject: subjectSelect.value
+  };
+
+  attendanceSaving = true;
+  setAttendanceButtonsBusy(true);
+  setAttendanceMessage('Đang ghi điểm danh...');
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      attendanceSaving = false;
+      setAttendanceButtonsBusy(false);
+      clearAttendanceSelection();
+      button.classList.add('selected');
+
+      const statusName = result.mark === 'V'
+        ? 'Vắng'
+        : result.mark === 'P'
+          ? 'Có phép'
+          : 'Có mặt';
+      const sessionName = result.session === 'C' ? 'Buổi chiều' : 'Buổi sáng';
+      const makeupText = result.isMakeup ? ' · Điểm danh bù' : '';
+      setAttendanceMessage(
+        'Đã ghi ' + statusName + ' · ' + sessionName + makeupText +
+        ' · ' + result.sheetName + ' · Ô ' + result.cell
+      );
+      loadAbsenceStats();
+    })
+    .withFailureHandler(function(error) {
+      attendanceSaving = false;
+      setAttendanceButtonsBusy(false);
+      setAttendanceMessage('Ghi điểm danh thất bại');
+      alert('Không ghi được điểm danh:\n' + getErrorMessage(error));
+    })
+    .saveAttendance(payload);
+}
+
+function setAttendanceButtonsBusy(isBusy) {
+  document.querySelectorAll('.status-btn').forEach(function(button) {
+    button.style.pointerEvents = isBusy ? 'none' : '';
+    button.style.opacity = isBusy ? '.55' : '';
+  });
+}
+
+function setAttendanceMessage(message) {
+  const element = document.getElementById('attendanceStatus');
+  if (element) element.textContent = message;
+}
+
+function clearAttendanceSelection() {
+  document.querySelectorAll('.status-btn').forEach(function(button) {
+    button.classList.remove('selected');
+  });
+}
+
+/** Cập nhật nút gọi điện, Zalo và tin nhắn theo số điện thoại. */
+function updateContactButtons(groupSelector, phone) {
+  const group = document.querySelector(groupSelector);
+  if (!group) return;
+  const buttons = group.querySelectorAll('.contact-btn');
+  const cleanPhone = normalizePhoneNumber(phone);
+  const zaloPhone = toVietnameseLocalPhone(cleanPhone);
+  buttons.forEach(function(button, index) {
+    button.style.opacity = cleanPhone ? '1' : '.45';
+    button.onclick = function() {
+      if (!cleanPhone) {
+        alert('Chưa có số điện thoại cho người này.');
+        return;
+      }
+
+      // Gọi bằng SIM của điện thoại. Dùng liên kết thật để thoát khỏi
+      // iframe bảo mật của Google Apps Script và mở ứng dụng Điện thoại.
+      if (index === 0) openPhoneAction('tel:' + cleanPhone);
+
+      // Mở đúng tài khoản Zalo theo số điện thoại.
+      // Từ trang Zalo người dùng có thể nhắn hoặc thực hiện cuộc gọi Zalo.
+      if (index === 1) openPhoneAction('https://zalo.me/' + zaloPhone);
+
+      // Cho chọn nhắn qua Zalo hoặc ứng dụng SMS.
+      if (index === 2) showMessageChoices(cleanPhone, zaloPhone);
+    };
+  });
+}
+
+function showMessageChoices(phone, zaloPhone) {
+  const overlay = document.getElementById('messageChoiceOverlay');
+  const zaloButton = document.getElementById('messageByZalo');
+  const smsButton = document.getElementById('messageBySms');
+  const cancelButton = document.getElementById('cancelMessageChoice');
+  if (!overlay) return;
+
+  zaloButton.onclick = function() {
+    closeMessageChoices();
+    openPhoneAction('https://zalo.me/' + zaloPhone);
+  };
+  smsButton.onclick = function() {
+    closeMessageChoices();
+    openPhoneAction('sms:' + phone);
+  };
+  cancelButton.onclick = closeMessageChoices;
+  overlay.onclick = function(event) {
+    if (event.target === overlay) closeMessageChoices();
+  };
+  overlay.classList.add('show');
+}
+
+function closeMessageChoices() {
+  const overlay = document.getElementById('messageChoiceOverlay');
+  if (overlay) overlay.classList.remove('show');
+}
+
+function openPhoneAction(url) {
+  const link = document.createElement('a');
+  link.href = url;
+  link.target = '_top';
+  link.rel = 'noopener';
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  setTimeout(function() {
+    link.remove();
+  }, 1000);
+}
+
+function normalizePhoneNumber(phone) {
+  let value = String(phone || '').trim().replace(/[^\d+]/g, '');
+  if (value.indexOf('0084') === 0) value = '+84' + value.slice(4);
+  if (value.indexOf('84') === 0 && value.charAt(0) !== '+') value = '+' + value;
+  return value;
+}
+
+function toVietnameseLocalPhone(phone) {
+  const value = String(phone || '');
+  if (value.indexOf('+84') === 0) return '0' + value.slice(3);
+  if (value.indexOf('84') === 0) return '0' + value.slice(2);
+  return value;
+}
+
+function showNoStudent(message) {
+  setText('studentAvatar', '--');
+  setText('studentName', message);
+  setText('studentMeta', '—');
+  setText('studentId', '—');
+  setText('contactStudentName', '—');
+  setText('contactFatherName', '—');
+  setText('contactMotherName', '—');
+  setText('profileBirthDate', '—');
+  setText('profileCCCD', '—');
+  setText('profileBHYT', '—');
+  setText('profileFather', '—');
+  setText('profileMother', '—');
+  setText('profileAddress', '—');
+  setText('profileNote', '—');
+  updateContactButtons('.contact-group.student', '');
+  updateContactButtons('.contact-group.father', '');
+  updateContactButtons('.contact-group.mother', '');
+  clearAttendanceSelection();
+}
+
+function fillSelect(selectId, values, firstText) {
+  const select = document.getElementById(selectId);
+  select.innerHTML = '';
+  select.appendChild(new Option(firstText, ''));
+  (values || []).forEach(function(value) { select.appendChild(new Option(value, value)); });
+  select.disabled = false;
+}
+function setSelectWaiting(selectId, text) {
+  const select = document.getElementById(selectId);
+  select.innerHTML = '';
+  select.appendChild(new Option(text, ''));
+  select.disabled = true;
+}
+/** Khôi phục giáo viên và lớp được chọn gần nhất trên thiết bị này. */
+function restoreLastSelections() {
+  restoreSelectValue('teacherSelect', localStorage.getItem(STORAGE_DEFAULT_TEACHER));
+  restoreSelectValue('classSelect', localStorage.getItem(STORAGE_DEFAULT_CLASS));
+}
+
+/** Khôi phục môn gần nhất của đúng lớp đang mở. */
+function restoreLastSubject(className) {
+  restoreSelectValue(
+    'subjectSelect',
+    localStorage.getItem(STORAGE_SUBJECT_PREFIX + String(className || ''))
+  );
+}
+
+/** Chỉ khôi phục khi giá trị cũ vẫn còn tồn tại trong danh sách hiện tại. */
+function restoreSelectValue(selectId, savedValue) {
+  const select = document.getElementById(selectId);
+  if (!select || !savedValue) return false;
+  const exists = Array.from(select.options).some(function(option) {
+    return option.value === savedValue;
+  });
+  if (exists) select.value = savedValue;
+  return exists;
+}
+function setText(id, value) {
+  const element = document.getElementById(id);
+  if (element) element.textContent = value == null ? '' : String(value);
+}
+function formatParentInfo(name, phone) {
+  const cleanName = String(name || '').trim();
+  const cleanPhone = String(phone || '').trim();
+  if (!cleanName && !cleanPhone) return '—';
+  if (cleanName && cleanPhone) return cleanName + ' · ' + cleanPhone;
+  return cleanName || cleanPhone;
+}
+function makeInitials(name) {
+  const text = String(name || '').trim();
+  if (!text) return '--';
+  const words = text.split(/\s+/);
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[words.length - 2][0] + words[words.length - 1][0]).toUpperCase();
+}
+function getErrorMessage(error) {
+  return error && error.message ? error.message : String(error || 'Lỗi không xác định');
+}
+
+/* ========================================================================== 
+   ĐĂNG KÝ KHUÔN MẶT - CÀI ĐẶT -> QUẢN LÝ KHUÔN MẶT
+   ========================================================================== */
+
+/** Tải trạng thái đăng ký của học sinh trong lớp đã chọn. */
+function loadFaceRegistrationClass() {
+  const select = document.getElementById('faceClassSelect');
+  const list = document.getElementById('faceStudentList');
+  const className = select ? select.value : '';
+  faceRegistrationClass = className;
+  faceRegistrationStudents = [];
+  updateFaceSummary();
+  if (!className) {
+    list.innerHTML = '<div class="face-empty">Chọn lớp để tải danh sách học sinh.</div>';
+    return;
+  }
+  list.innerHTML = '<div class="face-empty">Đang tải dữ liệu lớp ' + escapeHtml(className) + '...</div>';
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (faceRegistrationClass !== className) return;
+      faceRegistrationStudents = Array.isArray(result.students) ? result.students : [];
+      renderFaceRegistrationList();
+      updateFaceSummary();
+    })
+    .withFailureHandler(function(error) {
+      list.innerHTML = '<div class="face-empty">Không tải được dữ liệu đăng ký.</div>';
+      alert('Không tải được dữ liệu khuôn mặt:\n' + getErrorMessage(error));
+    })
+    .getFaceRegistrationData(className);
+}
+
+function updateFaceSummary() {
+  const total = faceRegistrationStudents.length;
+  const registered = faceRegistrationStudents.filter(function(student) {
+    return student.VectorCount === 5 && normalizeSubjectText(student.TrangThai) === 'da dang ky';
+  }).length;
+  setText('faceTotalCount', total || '—');
+  setText('faceRegisteredCount', total ? registered : '—');
+  setText('facePendingCount', total ? total - registered : '—');
+}
+
+/** Vẽ danh sách học sinh và nút Đăng ký/Cập nhật. */
+function renderFaceRegistrationList() {
+  const list = document.getElementById('faceStudentList');
+  list.innerHTML = '';
+  if (!faceRegistrationStudents.length) {
+    list.innerHTML = '<div class="face-empty">Lớp này chưa có học sinh.</div>';
+    return;
+  }
+  faceRegistrationStudents.forEach(function(student, index) {
+    const registered = student.VectorCount === 5;
+    const row = document.createElement('div');
+    row.className = 'face-student-row';
+
+    const avatar = document.createElement('div');
+    avatar.className = 'face-student-avatar';
+    avatar.textContent = makeInitials(student.HoVaTen);
+
+    const info = document.createElement('div');
+    info.className = 'face-student-info';
+    const name = document.createElement('div');
+    name.className = 'face-student-name';
+    name.textContent = (student.STT ? student.STT + '. ' : '') + student.HoVaTen;
+    const status = document.createElement('div');
+    status.className = 'face-student-status';
+    status.textContent = (student.TrangThai || 'Chưa đăng ký') +
+      (student.NgayCapNhat ? ' · ' + student.NgayCapNhat : '');
+    info.appendChild(name);
+    info.appendChild(status);
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'face-register-btn' + (registered ? ' update' : '');
+    button.textContent = registered ? 'Cập nhật' : 'Đăng ký';
+    button.addEventListener('click', function() { openFaceRegistration(index); });
+    row.appendChild(avatar);
+    row.appendChild(info);
+    row.appendChild(button);
+    list.appendChild(row);
+  });
+}
+
+/** Mở camera cho đúng học sinh; cảnh báo trước nếu dữ liệu cũ sẽ bị thay thế. */
+function openFaceRegistration(index) {
+  const student = faceRegistrationStudents[index];
+  if (!student) return;
+  if (student.VectorCount > 0) {
+    const accepted = confirm(
+      student.HoVaTen + ' đã có dữ liệu khuôn mặt.\n' +
+      'Đăng ký mới sẽ thay thế ảnh và 5 vector hiện tại. Tiếp tục?'
+    );
+    if (!accepted) return;
+  }
+  faceRegistrationStudent = student;
+  faceCapturedVectors = [];
+  facePortraitDataUrl = '';
+  externalCameraToken = (window.crypto && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : String(Date.now()) + '_' + Math.random().toString(36).slice(2);
+  const cameraUrl = EXTERNAL_CAMERA_URL + '?' + new URLSearchParams({
+    token: externalCameraToken,
+    returnOrigin: window.location.origin
+  }).toString();
+  externalCameraWindow = window.open(cameraUrl, 'faceRegistrationCamera');
+  if (!externalCameraWindow) {
+    alert('Trình duyệt đang chặn cửa sổ camera. Hãy cho phép cửa sổ bật lên rồi thử lại.');
+  }
+}
+
+/** Chỉ nạp ba mô hình cần thiết một lần trên mỗi lần mở WebApp. */
+function loadFaceModels() {
+  if (faceModelsPromise) return faceModelsPromise;
+  faceModelsPromise = (async function() {
+    if (typeof faceapi === 'undefined') throw new Error('Không tải được thư viện nhận diện khuôn mặt.');
+    await Promise.all([
+      faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URL),
+      faceapi.nets.faceLandmark68Net.loadFromUri(FACE_MODEL_URL),
+      faceapi.nets.faceRecognitionNet.loadFromUri(FACE_MODEL_URL)
+    ]);
+  })().catch(function(error) {
+    faceModelsPromise = null;
+    throw error;
+  });
+  return faceModelsPromise;
+}
+
+async function startFaceCamera() {
+  stopFaceCamera();
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    throw new Error('Trình duyệt này không hỗ trợ camera.');
+  }
+  faceCameraStream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: 'user', width: { ideal: 720 }, height: { ideal: 960 } },
+    audio: false
+  });
+  const video = document.getElementById('faceVideo');
+  video.srcObject = faceCameraStream;
+  await new Promise(function(resolve) {
+    if (video.readyState >= 2) return resolve();
+    video.onloadedmetadata = resolve;
+  });
+  await video.play();
+}
+
+function stopFaceCamera() {
+  if (faceCameraStream) {
+    faceCameraStream.getTracks().forEach(function(track) { track.stop(); });
+    faceCameraStream = null;
+  }
+  const video = document.getElementById('faceVideo');
+  if (video) video.srcObject = null;
+}
+
+/** Chụp một mẫu, yêu cầu đúng một khuôn mặt và tạo vector 128 giá trị. */
+async function captureFaceSample() {
+  if (faceCaptureBusy || faceCapturedVectors.length >= 5) return;
+  faceCaptureBusy = true;
+  const button = document.getElementById('faceCaptureButton');
+  button.disabled = true;
+  setText('faceCaptureMessage', 'Đang kiểm tra khuôn mặt...');
+  try {
+    const video = document.getElementById('faceVideo');
+    if (!video.videoWidth || !video.videoHeight) throw new Error('Camera chưa sẵn sàng.');
+    const canvas = document.getElementById('faceCaptureCanvas');
+    const maxWidth = 640;
+    const scale = Math.min(1, maxWidth / video.videoWidth);
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const detections = await faceapi
+      .detectAllFaces(canvas, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
+      .withFaceLandmarks()
+      .withFaceDescriptors();
+    if (!detections.length) throw new Error('Không thấy khuôn mặt. Hãy nhìn vào camera và tăng ánh sáng.');
+    if (detections.length > 1) throw new Error('Có nhiều khuôn mặt trong khung. Chỉ để một học sinh trước camera.');
+    const box = detections[0].detection.box;
+    if (box.width < canvas.width * 0.22 || box.height < canvas.height * 0.22) {
+      throw new Error('Khuôn mặt đang quá xa. Hãy đưa điện thoại lại gần hơn.');
+    }
+
+    faceCapturedVectors.push(Array.from(detections[0].descriptor).map(function(value) {
+      return Number(value.toFixed(7));
+    }));
+    if (faceCapturedVectors.length === 1) {
+      facePortraitDataUrl = canvas.toDataURL('image/jpeg', 0.82);
+    }
+    renderFaceProgress();
+    if (faceCapturedVectors.length < 5) {
+      setText('faceInstruction', FACE_INSTRUCTIONS[faceCapturedVectors.length]);
+      setText('faceCaptureMessage', 'Đã chụp mẫu ' + faceCapturedVectors.length + '/5. Chuẩn bị tư thế tiếp theo.');
+    } else {
+      setText('faceInstruction', 'Đã đủ 5 mẫu khuôn mặt');
+      setText('faceCaptureMessage', 'Kiểm tra tên học sinh rồi bấm Lưu đăng ký.');
+      document.getElementById('faceSaveButton').disabled = false;
+    }
+  } catch (error) {
+    setText('faceCaptureMessage', getErrorMessage(error));
+  } finally {
+    faceCaptureBusy = false;
+    button.disabled = faceCapturedVectors.length >= 5;
+  }
+}
+
+function renderFaceProgress() {
+  const container = document.getElementById('faceProgress');
+  if (!container) return;
+  container.innerHTML = '';
+  for (let index = 0; index < 5; index++) {
+    const dot = document.createElement('span');
+    dot.className = 'face-progress-dot' + (index < faceCapturedVectors.length ? ' done' : '');
+    dot.textContent = index < faceCapturedVectors.length ? '✓' : String(index + 1);
+    container.appendChild(dot);
+  }
+}
+
+function saveCapturedFaceRegistration() {
+  if (!faceRegistrationStudent || faceCapturedVectors.length !== 5 || !facePortraitDataUrl) return;
+  const saveButton = document.getElementById('faceSaveButton');
+  const captureButton = document.getElementById('faceCaptureButton');
+  saveButton.disabled = true;
+  captureButton.disabled = true;
+  setText('faceCaptureMessage', 'Đang lưu ảnh và dữ liệu khuôn mặt...');
+  google.script.run
+    .withSuccessHandler(function(result) {
+      alert('Đã đăng ký khuôn mặt cho ' + result.studentName + '.');
+      closeFaceRegistration();
+      loadFaceRegistrationClass();
+    })
+    .withFailureHandler(function(error) {
+      saveButton.disabled = false;
+      setText('faceCaptureMessage', 'Lưu thất bại. Dữ liệu cũ vẫn được giữ nguyên.');
+      alert('Không lưu được đăng ký khuôn mặt:\n' + getErrorMessage(error));
+    })
+    .saveFaceRegistration({
+      className: faceRegistrationClass,
+      studentSTT: faceRegistrationStudent.STT,
+      studentName: faceRegistrationStudent.HoVaTen,
+      portraitDataUrl: facePortraitDataUrl,
+      vectors: faceCapturedVectors
+    });
+}
+
+function closeFaceRegistration() {
+  stopFaceCamera();
+  document.getElementById('faceCaptureOverlay').classList.remove('show');
+  faceRegistrationStudent = null;
+  faceCapturedVectors = [];
+  facePortraitDataUrl = '';
+  faceCaptureBusy = false;
+}
+
+function setupFaceRegistrationActions() {
+  document.getElementById('faceCloseButton').addEventListener('click', function() {
+    if (faceCapturedVectors.length && !confirm('Thoát đăng ký? Các mẫu chưa lưu sẽ bị hủy.')) return;
+    closeFaceRegistration();
+  });
+  document.getElementById('faceCaptureButton').addEventListener('click', captureFaceSample);
+  document.getElementById('faceSaveButton').addEventListener('click', saveCapturedFaceRegistration);
+
+  // Nhận ảnh và 5 vector từ trang camera GitHub Pages.
+  window.addEventListener('message', function(event) {
+    if (event.origin !== EXTERNAL_CAMERA_ORIGIN) return;
+    const data = event.data || {};
+    if (data.type !== 'FACE_REGISTRATION_RESULT') return;
+    if (!externalCameraToken || data.token !== externalCameraToken) return;
+    if (!faceRegistrationStudent) return;
+    faceCapturedVectors = Array.isArray(data.vectors) ? data.vectors : [];
+    facePortraitDataUrl = String(data.portraitDataUrl || '');
+    externalCameraToken = '';
+    if (faceCapturedVectors.length !== 5 || !facePortraitDataUrl) {
+      alert('Dữ liệu camera gửi về chưa đủ 5 mẫu. Vui lòng đăng ký lại.');
+      return;
+    }
+    saveCapturedFaceRegistration();
+  });
+}
+
+function escapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
+
+
+/** Chuyển trang bằng thanh điều hướng cố định phía dưới. */
+function setupBottomNavigation() {
+  const navItems = Array.from(document.querySelectorAll('#bottomNav .navitem'));
+  const pages = Array.from(document.querySelectorAll('.app-page'));
+
+  function showPage(pageId) {
+    pages.forEach(function(page) {
+      const active = page.id === pageId;
+      page.classList.toggle('active-page', active);
+      page.setAttribute('aria-hidden', active ? 'false' : 'true');
+    });
+
+    navItems.forEach(function(item) {
+      const active = item.dataset.page === pageId;
+      item.classList.toggle('active', active);
+
+      const ring = item.querySelector('.ring');
+      if (active && !ring) {
+        const dot = document.createElement('span');
+        dot.className = 'ring';
+        item.appendChild(dot);
+      } else if (!active && ring) {
+        ring.remove();
+      }
+    });
+
+    // Luôn đưa trang mới về đầu khi đổi mục.
+    window.scrollTo(0, 0);
+
+    // Trang Cài đặt chỉ tải dữ liệu khuôn mặt khi người dùng thực sự mở trang.
+    if (pageId === 'pageSettings') {
+      const faceClass = document.getElementById('faceClassSelect');
+      if (faceClass && faceClass.value && faceRegistrationClass !== faceClass.value) {
+        loadFaceRegistrationClass();
+      }
+    }
+  }
+
+  navItems.forEach(function(item) {
+    item.addEventListener('click', function() {
+      const pageId = item.dataset.page;
+      if (!pageId) return;
+      showPage(pageId);
+    });
+  });
+
+  // Trạng thái ban đầu: Điểm danh.
+  showPage('pageAttendance');
+}
+
+/* Điểm bắt đầu: chạy sau khi toàn bộ giao diện đã tải xong. */
+window.addEventListener('load', function() {
+  setupBottomNavigation();
+  setupInterfaceActions();
+  setupFaceRegistrationActions();
+  loadAppConfig();
+});
+</script>
+
+
+
+
+</body>
+</html>

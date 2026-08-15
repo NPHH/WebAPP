@@ -21,7 +21,10 @@
     .dot.done{background:var(--teal)}
     .message{text-align:center;min-height:32px;font-size:11px;color:var(--muted);line-height:1.45}
     .actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:8px}
+    .actions.camera-ready #startCamera{display:none}
+    .actions:not(.camera-ready) #capture,.actions:not(.camera-ready) #finish{display:none}
     button{border:0;border-radius:13px;padding:13px 8px;font-size:13px;font-weight:700}
+    #startCamera{grid-column:1/-1;background:#fff;color:var(--navy)}
     #capture{background:#fff;color:var(--navy)} #finish{background:var(--teal);color:#fff} button:disabled{opacity:.42}
     canvas{display:none}
   </style>
@@ -40,9 +43,10 @@
     <div class="instruction" id="instruction">Đưa khuôn mặt vào giữa khung</div>
     <div class="progress" id="progress"></div>
     <div class="message" id="message">Đang nạp mô hình nhận diện...</div>
-    <div class="actions">
-      <button id="capture" disabled>Chụp mẫu</button>
-      <button id="finish" disabled>Hoàn tất</button>
+    <div class="actions" id="actions">
+      <button id="startCamera" type="button">Mở camera</button>
+      <button id="capture" type="button" disabled>Chụp mẫu</button>
+      <button id="finish" type="button" disabled>Hoàn tất</button>
     </div>
   </footer>
 
@@ -63,7 +67,8 @@
       'Mẫu 4/5 · Hơi ngẩng mặt',
       'Mẫu 5/5 · Hơi cúi mặt'
     ];
-    let stream=null,vectors=[],portraitDataUrl='',busy=false;
+    let stream=null,vectors=[],portraitDataUrl='',busy=false,modelsReady=false;
+    let modelsPromise=null;
     const $=id=>document.getElementById(id);
     $('studentName').textContent=studentName;
 
@@ -78,22 +83,78 @@
       }
     }
 
-    async function start(){
+    /**
+     * Nạp mô hình nhận diện song song, nhưng KHÔNG xin quyền camera ở đây.
+     * Safari iPhone yêu cầu việc mở camera phải bắt đầu trực tiếp từ lần chạm
+     * của người dùng. Vì vậy getUserMedia() chỉ được gọi trong openCamera().
+     */
+    function loadModels(){
+      if(modelsPromise)return modelsPromise;
+      modelsPromise=Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+        faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+        faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+      ]).then(()=>{modelsReady=true;return true});
+      return modelsPromise;
+    }
+
+    async function preparePage(){
       if(!token||!returnOrigin||!window.opener){
         throw new Error('Trang camera phải được mở từ WebApp điểm danh.');
       }
       if(typeof faceapi==='undefined') throw new Error('Không tải được thư viện nhận diện.');
-      await Promise.all([
-        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-        faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-        faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
-      ]);
-      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:720},height:{ideal:960}},audio:false});
-      $('video').srcObject=stream;
-      await $('video').play();
-      $('instruction').textContent=instructions[0];
-      setMessage('Đưa một khuôn mặt vào giữa khung rồi bấm Chụp mẫu.');
-      $('capture').disabled=false;
+      if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+        throw new Error('Trình duyệt này không hỗ trợ mở camera.');
+      }
+      // Bắt đầu nạp mô hình ngay để giảm thời gian chờ sau khi camera mở.
+      loadModels().catch(error=>setMessage('Không tải được mô hình nhận diện: '+(error.message||error)));
+      $('instruction').textContent='Bấm Mở camera để bắt đầu';
+      setMessage('Trên iPhone, hãy chọn Cho phép khi Safari hỏi quyền camera.');
+      $('startCamera').disabled=false;
+    }
+
+    /**
+     * Mở camera từ chính sự kiện chạm nút. Chỉ mở một lần và giữ nguyên luồng
+     * trong suốt 5 mẫu; tuyệt đối không dừng/mở lại sau mỗi lần chụp.
+     */
+    async function openCamera(){
+      if(busy||stream)return;
+      busy=true;
+      $('startCamera').disabled=true;
+      setMessage('Đang mở camera trước...');
+      try{
+        stream=await navigator.mediaDevices.getUserMedia({
+          video:{facingMode:{ideal:'user'},width:{ideal:720},height:{ideal:960}},
+          audio:false
+        });
+        const video=$('video');
+        video.setAttribute('playsinline','');
+        video.muted=true;
+        video.srcObject=stream;
+        await new Promise((resolve,reject)=>{
+          if(video.readyState>=2&&video.videoWidth)return resolve();
+          const timer=setTimeout(()=>reject(new Error('Camera mở quá lâu. Hãy thử lại.')),10000);
+          video.onloadedmetadata=()=>{clearTimeout(timer);resolve()};
+        });
+        await video.play();
+        $('actions').classList.add('camera-ready');
+        $('instruction').textContent=instructions[0];
+        setMessage(modelsReady?'Đưa một khuôn mặt vào giữa khung rồi bấm Chụp mẫu.':'Camera đã mở. Đang nạp mô hình nhận diện...');
+        await loadModels();
+        setMessage('Đưa một khuôn mặt vào giữa khung rồi bấm Chụp mẫu.');
+        $('capture').disabled=false;
+      }catch(error){
+        stop();
+        $('actions').classList.remove('camera-ready');
+        $('instruction').textContent='Chưa mở được camera';
+        const name=String(error&&error.name||'');
+        if(name==='NotAllowedError'||name==='SecurityError'){
+          setMessage('Safari đang chặn camera. Vào aA → Cài đặt trang web → Camera → Cho phép, rồi bấm Mở camera lại.');
+        }else{
+          setMessage(error.message||String(error));
+        }
+        $('startCamera').disabled=false;
+      }finally{busy=false}
     }
 
     async function capture(){
@@ -101,7 +162,10 @@
       busy=true;$('capture').disabled=true;setMessage('Đang kiểm tra khuôn mặt...');
       try{
         const video=$('video'),canvas=$('canvas');
-        if(!video.videoWidth)throw new Error('Camera chưa sẵn sàng.');
+        const videoTrack=stream&&stream.getVideoTracks?stream.getVideoTracks()[0]:null;
+        if(!videoTrack||videoTrack.readyState!=='live'||!video.videoWidth){
+          throw new Error('Camera chưa sẵn sàng. Hãy bấm Mở camera lại.');
+        }
         const scale=Math.min(1,640/video.videoWidth);
         canvas.width=Math.round(video.videoWidth*scale);canvas.height=Math.round(video.videoHeight*scale);
         canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
@@ -121,7 +185,10 @@
           setMessage('Bấm Hoàn tất để gửi dữ liệu về WebApp.');
           $('finish').disabled=false;
         }
-      }catch(error){setMessage(error.message||String(error))}
+      }catch(error){
+        // Lỗi của một mẫu không được đổi thành lỗi mở camera và không dừng luồng.
+        setMessage('Chưa chụp được mẫu '+(vectors.length+1)+': '+(error.message||String(error)));
+      }
       finally{busy=false;$('capture').disabled=vectors.length>=5}
     }
 
@@ -133,10 +200,15 @@
       stop();setTimeout(()=>window.close(),800);
     }
 
-    function stop(){if(stream){stream.getTracks().forEach(track=>track.stop());stream=null}}
+    function stop(){
+      if(stream){stream.getTracks().forEach(track=>track.stop());stream=null}
+      const video=$('video');
+      if(video)video.srcObject=null;
+    }
+    $('startCamera').addEventListener('click',openCamera);
     $('capture').addEventListener('click',capture);$('finish').addEventListener('click',finish);
     window.addEventListener('beforeunload',stop);renderProgress();
-    start().catch(error=>{setMessage(error.message||String(error));$('instruction').textContent='Không thể mở camera';});
+    preparePage().catch(error=>{setMessage(error.message||String(error));$('instruction').textContent='Không thể chuẩn bị trang camera';$('startCamera').disabled=true;});
   </script>
 </body>
 </html>
