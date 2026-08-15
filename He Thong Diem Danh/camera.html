@@ -190,8 +190,15 @@
         $('instruction').textContent=instructions[0];
         setMessage(modelsReady?'Đưa một khuôn mặt vào giữa khung rồi bấm Chụp mẫu.':'Camera đã mở. Đang nạp mô hình nhận diện...');
         await loadModels();
-        // Chờ Safari ổn định luồng hình trước khi cho phép lần chụp đầu tiên.
-        await new Promise(resolve=>setTimeout(resolve,650));
+        // Chạy thử toàn bộ chuỗi nhận diện một lần trước khi bật nút Chụp.
+        // Lần chạy đầu của TensorFlow thường làm Safari đứng hình/nháy 2-3 giây;
+        // đưa thời gian này vào bước chuẩn bị sẽ giúp mẫu 1 mượt như mẫu 2-5.
+        setMessage('Đang tối ưu nhận diện cho lần chụp đầu...');
+        try{
+          await faceapi.detectSingleFace(video,new faceapi.TinyFaceDetectorOptions({inputSize:224,scoreThreshold:.35}))
+            .withFaceLandmarks().withFaceDescriptor();
+        }catch(ignored){}
+        await new Promise(resolve=>setTimeout(resolve,250));
         setMessage('Đưa một khuôn mặt vào giữa khung rồi bấm Chụp mẫu.');
         $('capture').disabled=false;
       }catch(error){
@@ -400,12 +407,7 @@
       if(data.type!=='FACE_UPLOAD_RESULT'||String(data.token||'')!==token)return;
       uploadBusy=false;
       if(data.ok){
-        stop();
-        $('instruction').textContent='Đăng ký thành công';
-        setMessage(data.message||'Đã lưu ảnh và 5 mẫu khuôn mặt. Hãy quay lại WebApp.');
-        $('finish').textContent='Đã lưu';
-        $('finish').disabled=true;
-        setTimeout(()=>window.close(),1200);
+        showSaveSuccess(data.message);
       }else{
         $('instruction').textContent='Chưa lưu được dữ liệu';
         setMessage(data.message||'Lưu thất bại. Hãy thử lại.');
