@@ -69,9 +69,9 @@
   <div class="result-overlay" id="resultOverlay">
     <div class="result-card">
       <div class="result-icon">✓</div>
-      <div class="result-title">Đăng ký thành công</div>
+      <div class="result-title" id="resultTitle">Đã gửi dữ liệu</div>
       <div class="result-text" id="resultText">Đã lưu ảnh và 5 mẫu khuôn mặt.</div>
-      <div class="result-auto">Thẻ camera sẽ tự đóng sau 3 giây…</div>
+      <div class="result-auto">Thẻ camera sẽ tự đóng trong giây lát…</div>
       <button class="result-close" id="resultClose" type="button">Đóng và quay lại WebApp</button>
     </div>
   </div>
@@ -190,15 +190,7 @@
         $('instruction').textContent=instructions[0];
         setMessage(modelsReady?'Đưa một khuôn mặt vào giữa khung rồi bấm Chụp mẫu.':'Camera đã mở. Đang nạp mô hình nhận diện...');
         await loadModels();
-        // Chạy thử toàn bộ chuỗi nhận diện một lần trước khi bật nút Chụp.
-        // Lần chạy đầu của TensorFlow thường làm Safari đứng hình/nháy 2-3 giây;
-        // đưa thời gian này vào bước chuẩn bị sẽ giúp mẫu 1 mượt như mẫu 2-5.
-        setMessage('Đang tối ưu nhận diện cho lần chụp đầu...');
-        try{
-          await faceapi.detectSingleFace(video,new faceapi.TinyFaceDetectorOptions({inputSize:224,scoreThreshold:.35}))
-            .withFaceLandmarks().withFaceDescriptor();
-        }catch(ignored){}
-        await new Promise(resolve=>setTimeout(resolve,250));
+        await new Promise(resolve=>setTimeout(resolve,180));
         setMessage('Đưa một khuôn mặt vào giữa khung rồi bấm Chụp mẫu.');
         $('capture').disabled=false;
       }catch(error){
@@ -251,13 +243,13 @@
         canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));
         canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));
         canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
-        const detections=await faceapi.detectAllFaces(canvas,new faceapi.TinyFaceDetectorOptions({inputSize:320,scoreThreshold:.5})).withFaceLandmarks().withFaceDescriptors();
+        const detections=await faceapi.detectAllFaces(canvas,new faceapi.TinyFaceDetectorOptions({inputSize:224,scoreThreshold:.45})).withFaceLandmarks().withFaceDescriptors();
         if(!detections.length)throw new Error('Không thấy khuôn mặt. Hãy chụp lại nơi đủ sáng.');
         if(detections.length>1)throw new Error('Ảnh có nhiều khuôn mặt. Chỉ chụp một học sinh.');
         const box=detections[0].detection.box;
         if(box.width<canvas.width*.22||box.height<canvas.height*.22)throw new Error('Khuôn mặt quá xa. Hãy chụp gần hơn.');
         vectors.push(Array.from(detections[0].descriptor).map(v=>Number(v.toFixed(7))));
-        if(vectors.length===1)portraitDataUrl=canvas.toDataURL('image/jpeg',.82);
+        if(vectors.length===1)portraitDataUrl=createPortraitDataUrl(canvas,box);
         renderProgress();
         if(vectors.length<5){
           $('instruction').textContent=instructions[vectors.length];
@@ -289,13 +281,13 @@
         const scale=Math.min(1,640/video.videoWidth);
         canvas.width=Math.round(video.videoWidth*scale);canvas.height=Math.round(video.videoHeight*scale);
         canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
-        const detections=await faceapi.detectAllFaces(canvas,new faceapi.TinyFaceDetectorOptions({inputSize:320,scoreThreshold:.5})).withFaceLandmarks().withFaceDescriptors();
+        const detections=await faceapi.detectAllFaces(canvas,new faceapi.TinyFaceDetectorOptions({inputSize:224,scoreThreshold:.45})).withFaceLandmarks().withFaceDescriptors();
         if(!detections.length)throw new Error('Không thấy khuôn mặt. Hãy nhìn vào camera và tăng ánh sáng.');
         if(detections.length>1)throw new Error('Có nhiều khuôn mặt. Chỉ để một học sinh trước camera.');
         const box=detections[0].detection.box;
         if(box.width<canvas.width*.22||box.height<canvas.height*.22)throw new Error('Khuôn mặt quá xa. Hãy đưa điện thoại lại gần hơn.');
         vectors.push(Array.from(detections[0].descriptor).map(v=>Number(v.toFixed(7))));
-        if(vectors.length===1)portraitDataUrl=canvas.toDataURL('image/jpeg',.82);
+        if(vectors.length===1)portraitDataUrl=createPortraitDataUrl(canvas,box);
         renderProgress();
         if(vectors.length<5){
           $('instruction').textContent=instructions[vectors.length];
@@ -313,79 +305,56 @@
     }
 
     /**
-     * Gửi nền sang Apps Script bằng iframe ẩn, sau đó kiểm tra kết quả bằng
-     * JSONP. Trang camera không đổi địa chỉ nên Safari vẫn cho tự đóng thẻ.
+     * Chỉ lưu ảnh chân dung đã cắt quanh khuôn mặt thay vì cả khung camera.
+     * Ảnh nhẹ hơn nhiều, gửi nhanh hơn và vẫn đủ rõ để giáo viên nhận diện.
+     */
+    function createPortraitDataUrl(sourceCanvas,box){
+      const padX=box.width*.48,padTop=box.height*.55,padBottom=box.height*.38;
+      const sx=Math.max(0,Math.floor(box.x-padX));
+      const sy=Math.max(0,Math.floor(box.y-padTop));
+      const right=Math.min(sourceCanvas.width,Math.ceil(box.x+box.width+padX));
+      const bottom=Math.min(sourceCanvas.height,Math.ceil(box.y+box.height+padBottom));
+      const sw=Math.max(1,right-sx),sh=Math.max(1,bottom-sy);
+      const portrait=document.createElement('canvas');
+      portrait.width=Math.min(300,sw);
+      portrait.height=Math.max(1,Math.round(sh*(portrait.width/sw)));
+      portrait.getContext('2d').drawImage(sourceCanvas,sx,sy,sw,sh,0,0,portrait.width,portrait.height);
+      return portrait.toDataURL('image/jpeg',.68);
+    }
+
+    /**
+     * Gửi nền bằng sendBeacon để tác vụ tiếp tục ngay cả khi thẻ camera đóng.
+     * WebApp chính sẽ kiểm tra trạng thái lưu qua google.script.run.
      */
     function finish(){
       if(vectors.length!==5||!portraitDataUrl||uploadBusy)return;
       uploadBusy=true;
       $('finish').disabled=true;
       $('capture').disabled=true;
-      setMessage('Đang lưu ảnh và 5 mẫu khuôn mặt về hệ thống...');
-
-      let target=document.getElementById('uploadTarget');
-      if(!target){
-        target=document.createElement('iframe');
-        target.id='uploadTarget';
-        target.name='faceUploadTarget';
-        target.hidden=true;
-        document.body.appendChild(target);
+      setMessage('Đang gửi dữ liệu về hệ thống...');
+      const data=new FormData();
+      data.append('action','faceRegistrationUpload');
+      data.append('token',token);
+      data.append('vectors',JSON.stringify(vectors));
+      data.append('portraitDataUrl',portraitDataUrl);
+      let accepted=false;
+      try{
+        if(navigator.sendBeacon)accepted=navigator.sendBeacon(submitUrl,data);
+      }catch(ignored){}
+      if(!accepted){
+        // Phương án dự phòng cho trình duyệt chưa hỗ trợ sendBeacon.
+        try{
+          fetch(submitUrl,{method:'POST',body:data,mode:'no-cors',keepalive:true}).catch(()=>{});
+          accepted=true;
+        }catch(ignored){}
       }
-      const form=document.createElement('form');
-      form.method='POST';
-      form.action=submitUrl;
-      form.target='faceUploadTarget';
-      form.style.display='none';
-      const fields={
-        action:'faceRegistrationUpload',
-        token:token,
-        vectors:JSON.stringify(vectors),
-        portraitDataUrl:portraitDataUrl
-      };
-      Object.keys(fields).forEach(name=>{
-        const input=document.createElement('input');
-        input.type='hidden';input.name=name;input.value=fields[name];
-        form.appendChild(input);
-      });
-      document.body.appendChild(form);
-      form.submit();
-      form.remove();
-      pollUploadResult(0);
-    }
-
-    function pollUploadResult(attempt){
-      if(!uploadBusy)return;
-      if(attempt>45){
+      if(!accepted){
         uploadBusy=false;
         $('finish').disabled=false;
-        setMessage('Chưa nhận được kết quả lưu. Hãy kiểm tra mạng rồi bấm Hoàn tất lại.');
+        setMessage('Không gửi được dữ liệu. Hãy kiểm tra mạng và thử lại.');
         return;
       }
-      const callbackName='faceStatus'+Date.now()+Math.floor(Math.random()*10000);
-      const script=document.createElement('script');
-      let completed=false;
-      window[callbackName]=data=>{
-        completed=true;
-        delete window[callbackName];
-        script.remove();
-        if(data&&data.done){
-          uploadBusy=false;
-          if(data.ok){showSaveSuccess(data.message)}
-          else{
-            $('finish').disabled=false;
-            setMessage('Lưu thất bại: '+(data.message||'Lỗi không xác định'));
-          }
-        }else setTimeout(()=>pollUploadResult(attempt+1),650);
-      };
-      script.onerror=()=>{
-        if(completed)return;
-        delete window[callbackName];script.remove();
-        setTimeout(()=>pollUploadResult(attempt+1),900);
-      };
-      const separator=submitUrl.indexOf('?')===-1?'?':'&';
-      script.src=submitUrl+separator+'action=faceRegistrationStatus&token='+encodeURIComponent(token)+
-        '&callback='+encodeURIComponent(callbackName)+'&_='+Date.now();
-      document.head.appendChild(script);
+      showSubmissionAccepted();
     }
 
     function closeCameraTab(){
@@ -393,28 +362,14 @@
       window.close();
     }
 
-    function showSaveSuccess(message){
+    function showSubmissionAccepted(){
       stop();
-      $('resultText').textContent=message||'Đã lưu ảnh và 5 mẫu khuôn mặt.';
+      $('resultTitle').textContent='Đã gửi dữ liệu';
+      $('resultText').textContent='WebApp đang hoàn tất lưu ảnh và 5 mẫu khuôn mặt.';
       $('resultOverlay').classList.add('show');
-      try{if(window.opener)window.opener.postMessage({type:'FACE_REGISTRATION_SAVED',token},'*')}catch(ignored){}
-      setTimeout(closeCameraTab,3000);
+      try{if(window.opener)window.opener.postMessage({type:'FACE_REGISTRATION_SUBMITTED',token},'*')}catch(ignored){}
+      setTimeout(closeCameraTab,1500);
     }
-
-    // Apps Script trả kết quả về từ iframe ẩn. Chỉ nhận đúng mã phiên hiện tại.
-    window.addEventListener('message',event=>{
-      const data=event.data||{};
-      if(data.type!=='FACE_UPLOAD_RESULT'||String(data.token||'')!==token)return;
-      uploadBusy=false;
-      if(data.ok){
-        showSaveSuccess(data.message);
-      }else{
-        $('instruction').textContent='Chưa lưu được dữ liệu';
-        setMessage(data.message||'Lưu thất bại. Hãy thử lại.');
-        $('finish').disabled=false;
-        $('capture').disabled=vectors.length>=5;
-      }
-    });
 
     function stop(){
       if(stream){stream.getTracks().forEach(track=>track.stop());stream=null}
