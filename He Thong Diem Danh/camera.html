@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Đăng ký khuôn mặt học sinh</title>
+  <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  <style>
+    :root{--navy:#0f2743;--teal:#1f9d8b;--paper:#eef2f6;--muted:#b9c9d9;}
+    *{box-sizing:border-box} html,body{margin:0;height:100%;font-family:Arial,sans-serif;background:#071727;color:#fff}
+    body{display:flex;flex-direction:column;overflow:hidden}
+    header{padding:max(14px,env(safe-area-inset-top)) 14px 10px;background:var(--navy)}
+    h1{font-size:15px;margin:0 0 4px}.student{font-size:12px;color:var(--muted)}
+    .camera{position:relative;flex:1;min-height:260px;background:#02080e;display:flex;align-items:center;justify-content:center;overflow:hidden}
+    video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+    .guide{position:absolute;width:62%;max-width:270px;aspect-ratio:3/4;border:3px solid rgba(255,255,255,.85);border-radius:48% 48% 44% 44%;box-shadow:0 0 0 999px rgba(0,0,0,.26);pointer-events:none}
+    footer{padding:14px 16px calc(16px + env(safe-area-inset-bottom));background:#0c2035}
+    .instruction{text-align:center;font-size:14px;font-weight:700;min-height:38px}
+    .progress{display:flex;justify-content:center;gap:8px;margin:7px 0 12px}
+    .dot{width:24px;height:24px;border-radius:50%;background:rgba(255,255,255,.13);display:flex;align-items:center;justify-content:center;font-size:10px}
+    .dot.done{background:var(--teal)}
+    .message{text-align:center;min-height:32px;font-size:11px;color:var(--muted);line-height:1.45}
+    .actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:8px}
+    button{border:0;border-radius:13px;padding:13px 8px;font-size:13px;font-weight:700}
+    #capture{background:#fff;color:var(--navy)} #finish{background:var(--teal);color:#fff} button:disabled{opacity:.42}
+    canvas{display:none}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Đăng ký khuôn mặt</h1>
+    <div class="student" id="studentName">Đang chuẩn bị...</div>
+  </header>
+  <main class="camera">
+    <video id="video" autoplay muted playsinline></video>
+    <div class="guide"></div>
+    <canvas id="canvas"></canvas>
+  </main>
+  <footer>
+    <div class="instruction" id="instruction">Đưa khuôn mặt vào giữa khung</div>
+    <div class="progress" id="progress"></div>
+    <div class="message" id="message">Đang nạp mô hình nhận diện...</div>
+    <div class="actions">
+      <button id="capture" disabled>Chụp mẫu</button>
+      <button id="finish" disabled>Hoàn tất</button>
+    </div>
+  </footer>
+
+  <script>
+    /*
+     * Trang này chỉ chạy camera và tạo vector ngay trên điện thoại.
+     * Không có Google Sheets, Drive hay thông tin hồ sơ học sinh tại đây.
+     */
+    const MODEL_URL='https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights';
+    const params=new URLSearchParams(location.search);
+    const token=params.get('token')||'';
+    const returnOrigin=params.get('returnOrigin')||'';
+    const studentName=params.get('studentName')||'Học sinh';
+    const instructions=[
+      'Mẫu 1/5 · Nhìn thẳng vào camera',
+      'Mẫu 2/5 · Quay nhẹ sang trái',
+      'Mẫu 3/5 · Quay nhẹ sang phải',
+      'Mẫu 4/5 · Hơi ngẩng mặt',
+      'Mẫu 5/5 · Hơi cúi mặt'
+    ];
+    let stream=null,vectors=[],portraitDataUrl='',busy=false;
+    const $=id=>document.getElementById(id);
+    $('studentName').textContent=studentName;
+
+    function setMessage(text){$('message').textContent=text}
+    function renderProgress(){
+      $('progress').innerHTML='';
+      for(let i=0;i<5;i++){
+        const dot=document.createElement('span');
+        dot.className='dot'+(i<vectors.length?' done':'');
+        dot.textContent=i<vectors.length?'✓':String(i+1);
+        $('progress').appendChild(dot);
+      }
+    }
+
+    async function start(){
+      if(!token||!returnOrigin||!window.opener){
+        throw new Error('Trang camera phải được mở từ WebApp điểm danh.');
+      }
+      if(typeof faceapi==='undefined') throw new Error('Không tải được thư viện nhận diện.');
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+        faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+        faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+      ]);
+      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:720},height:{ideal:960}},audio:false});
+      $('video').srcObject=stream;
+      await $('video').play();
+      $('instruction').textContent=instructions[0];
+      setMessage('Đưa một khuôn mặt vào giữa khung rồi bấm Chụp mẫu.');
+      $('capture').disabled=false;
+    }
+
+    async function capture(){
+      if(busy||vectors.length>=5)return;
+      busy=true;$('capture').disabled=true;setMessage('Đang kiểm tra khuôn mặt...');
+      try{
+        const video=$('video'),canvas=$('canvas');
+        if(!video.videoWidth)throw new Error('Camera chưa sẵn sàng.');
+        const scale=Math.min(1,640/video.videoWidth);
+        canvas.width=Math.round(video.videoWidth*scale);canvas.height=Math.round(video.videoHeight*scale);
+        canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
+        const detections=await faceapi.detectAllFaces(canvas,new faceapi.TinyFaceDetectorOptions({inputSize:320,scoreThreshold:.5})).withFaceLandmarks().withFaceDescriptors();
+        if(!detections.length)throw new Error('Không thấy khuôn mặt. Hãy nhìn vào camera và tăng ánh sáng.');
+        if(detections.length>1)throw new Error('Có nhiều khuôn mặt. Chỉ để một học sinh trước camera.');
+        const box=detections[0].detection.box;
+        if(box.width<canvas.width*.22||box.height<canvas.height*.22)throw new Error('Khuôn mặt quá xa. Hãy đưa điện thoại lại gần hơn.');
+        vectors.push(Array.from(detections[0].descriptor).map(v=>Number(v.toFixed(7))));
+        if(vectors.length===1)portraitDataUrl=canvas.toDataURL('image/jpeg',.82);
+        renderProgress();
+        if(vectors.length<5){
+          $('instruction').textContent=instructions[vectors.length];
+          setMessage('Đã chụp '+vectors.length+'/5 mẫu. Chuẩn bị tư thế tiếp theo.');
+        }else{
+          $('instruction').textContent='Đã đủ 5 mẫu khuôn mặt';
+          setMessage('Bấm Hoàn tất để gửi dữ liệu về WebApp.');
+          $('finish').disabled=false;
+        }
+      }catch(error){setMessage(error.message||String(error))}
+      finally{busy=false;$('capture').disabled=vectors.length>=5}
+    }
+
+    function finish(){
+      if(vectors.length!==5||!portraitDataUrl)return;
+      $('finish').disabled=true;setMessage('Đang chuyển dữ liệu về WebApp...');
+      window.opener.postMessage({type:'FACE_REGISTRATION_RESULT',token,vectors,portraitDataUrl},returnOrigin);
+      setMessage('Đã chuyển xong. Có thể đóng cửa sổ này.');
+      stop();setTimeout(()=>window.close(),800);
+    }
+
+    function stop(){if(stream){stream.getTracks().forEach(track=>track.stop());stream=null}}
+    $('capture').addEventListener('click',capture);$('finish').addEventListener('click',finish);
+    window.addEventListener('beforeunload',stop);renderProgress();
+    start().catch(error=>{setMessage(error.message||String(error));$('instruction').textContent='Không thể mở camera';});
+  </script>
+</body>
+</html>
