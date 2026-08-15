@@ -4,8 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>Đăng ký khuôn mặt học sinh</title>
-  <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#0f2743">
   <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
   <style>
     :root{--navy:#0f2743;--teal:#1f9d8b;--paper:#eef2f6;--muted:#b9c9d9;}
@@ -88,9 +86,6 @@
     const token=params.get('token')||'';
     const submitUrl=params.get('submitUrl')||'';
     const studentName=params.get('studentName')||'Học sinh';
-    const LOCAL_DB_NAME='attendance-face-pwa';
-    const LOCAL_DB_VERSION=1;
-    const LOCAL_STORE='registrations';
     const instructions=[
       'Mẫu 1/5 · Nhìn thẳng vào camera',
       'Mẫu 2/5 · Quay nhẹ sang trái',
@@ -105,93 +100,6 @@
     $('studentName').textContent=studentName;
 
     function setMessage(text){$('message').textContent=text}
-
-    /** Mở kho dữ liệu cục bộ của riêng PWA trên thiết bị này. */
-    function openLocalDb(){
-      return new Promise((resolve,reject)=>{
-        const request=indexedDB.open(LOCAL_DB_NAME,LOCAL_DB_VERSION);
-        request.onupgradeneeded=()=>{
-          const db=request.result;
-          if(!db.objectStoreNames.contains(LOCAL_STORE))db.createObjectStore(LOCAL_STORE,{keyPath:'token'});
-        };
-        request.onsuccess=()=>resolve(request.result);
-        request.onerror=()=>reject(request.error||new Error('Không mở được bộ nhớ cục bộ.'));
-      });
-    }
-
-    async function saveLocalJob(job){
-      const db=await openLocalDb();
-      return new Promise((resolve,reject)=>{
-        const tx=db.transaction(LOCAL_STORE,'readwrite');
-        tx.objectStore(LOCAL_STORE).put(job);
-        tx.oncomplete=()=>{db.close();resolve()};
-        tx.onerror=()=>{db.close();reject(tx.error)};
-      });
-    }
-
-    async function getLocalJobs(){
-      const db=await openLocalDb();
-      return new Promise((resolve,reject)=>{
-        const tx=db.transaction(LOCAL_STORE,'readonly');
-        const request=tx.objectStore(LOCAL_STORE).getAll();
-        request.onsuccess=()=>resolve(request.result||[]);
-        request.onerror=()=>reject(request.error);
-        tx.oncomplete=()=>db.close();
-      });
-    }
-
-    async function deleteLocalJob(jobToken){
-      const db=await openLocalDb();
-      return new Promise((resolve,reject)=>{
-        const tx=db.transaction(LOCAL_STORE,'readwrite');
-        tx.objectStore(LOCAL_STORE).delete(jobToken);
-        tx.oncomplete=()=>{db.close();resolve()};
-        tx.onerror=()=>{db.close();reject(tx.error)};
-      });
-    }
-
-    function jobToFormData(job){
-      const data=new FormData();
-      data.append('action','faceRegistrationUpload');
-      data.append('token',job.token);
-      data.append('vectors',JSON.stringify(job.vectors));
-      data.append('portraitDataUrl',job.portraitDataUrl);
-      return data;
-    }
-
-    /** Gửi một công việc nền; bản cục bộ vẫn giữ lại cho đến khi xác nhận. */
-    function submitLocalJob(job){
-      let accepted=false;
-      try{if(navigator.sendBeacon)accepted=navigator.sendBeacon(job.submitUrl,jobToFormData(job))}catch(ignored){}
-      if(!accepted){
-        try{
-          fetch(job.submitUrl,{method:'POST',body:jobToFormData(job),mode:'no-cors',keepalive:true}).catch(()=>{});
-          accepted=true;
-        }catch(ignored){}
-      }
-      return accepted;
-    }
-
-    /** Kiểm tra những bản cũ và gửi lại khi PWA được mở lần sau. */
-    async function syncPendingJobs(){
-      try{
-        const jobs=await getLocalJobs();
-        jobs.forEach(job=>{
-          // Sau 6 giờ, nếu yêu cầu đã từng gửi thì Google thường đã xử lý xong;
-          // xóa bản hàng đợi cũ để tránh gửi mã phiên hết hạn mãi mãi.
-          if(job.lastSubmittedAt&&Date.now()-job.lastSubmittedAt>21600000){deleteLocalJob(job.token).catch(()=>{});return}
-          job.lastSubmittedAt=Date.now();
-          saveLocalJob(job).then(()=>submitLocalJob(job)).catch(()=>{});
-        });
-      }catch(ignored){}
-    }
-
-    function preparePwa(){
-      if('serviceWorker' in navigator){
-        navigator.serviceWorker.register('./sw.js').catch(()=>{});
-      }
-      syncPendingJobs();
-    }
     function enableFallback(message){
       stop();
       $('actions').classList.remove('camera-ready');
@@ -415,43 +323,47 @@
     }
 
     /**
-     * Gửi nền bằng sendBeacon để tác vụ tiếp tục ngay cả khi thẻ camera đóng.
-     * WebApp chính sẽ kiểm tra trạng thái lưu qua google.script.run.
+     * Gửi ảnh + 5 vector về Apps Script và CHỜ request thật sự hoàn tất rồi
+     * mới báo thành công.
+     *
+     * Trước đây trang dùng navigator.sendBeacon() và fetch({keepalive:true})
+     * để tác vụ tiếp tục chạy nền dù tab đóng ngay sau đó. Nhưng cả hai cách
+     * này đều bị trình duyệt giới hạn CỨNG khoảng 64KB cho mỗi yêu cầu (đây là
+     * giới hạn của trình duyệt, không phải của Apps Script). Ảnh chân dung +
+     * 5 vector cộng lại rất dễ vượt mức này tùy ảnh sáng/khuôn mặt, khiến
+     * trình duyệt âm thầm từ chối gửi. Code cũ lại gán "đã gửi thành công"
+     * ngay sau khi GỌI fetch chứ không đợi fetch xong, nên trang vẫn hiện
+     * "Đã gửi dữ liệu" và tự đóng dù dữ liệu chưa từng tới máy chủ — đây là
+     * lý do vector không được lưu vào Google Sheets/Drive dù trang báo thành
+     * công.
+     *
+     * Cách sửa: bỏ keepalive/sendBeacon, dùng fetch thường (không giới hạn
+     * 64KB) và đợi Promise đó chạy xong trước khi coi là đã gửi. Trong lúc
+     * chờ, không cho phép đóng trang để tránh Safari treo tác vụ nền.
      */
     async function finish(){
       if(vectors.length!==5||!portraitDataUrl||uploadBusy)return;
       uploadBusy=true;
       $('finish').disabled=true;
       $('capture').disabled=true;
-      setMessage('Đang lưu trên điện thoại...');
-      const job={
-        token:token,
-        submitUrl:submitUrl,
-        studentName:studentName,
-        vectors:vectors,
-        portraitDataUrl:portraitDataUrl,
-        createdAt:Date.now(),
-        lastSubmittedAt:0
-      };
+      setMessage('Đang gửi dữ liệu về hệ thống, vui lòng không tắt trang...');
+      const data=new FormData();
+      data.append('action','faceRegistrationUpload');
+      data.append('token',token);
+      data.append('vectors',JSON.stringify(vectors));
+      data.append('portraitDataUrl',portraitDataUrl);
       try{
-        await saveLocalJob(job);
+        // mode:'no-cors' vì Apps Script không trả header CORS, nên không đọc
+        // được nội dung phản hồi (opaque) - nhưng request vẫn thực sự chạy
+        // và đợi xong bình thường, không còn giới hạn 64KB như keepalive.
+        await fetch(submitUrl,{method:'POST',body:data,mode:'no-cors'});
+        showSubmissionAccepted();
       }catch(error){
         uploadBusy=false;
         $('finish').disabled=false;
-        setMessage('Không lưu được trên điện thoại: '+(error.message||String(error)));
-        return;
+        $('capture').disabled=true; // đã đủ 5 mẫu, không cần chụp thêm
+        setMessage('Gửi dữ liệu thất bại (có thể do mất mạng). Hãy bấm Hoàn tất để thử gửi lại.');
       }
-      job.lastSubmittedAt=Date.now();
-      saveLocalJob(job).catch(()=>{});
-      const submitted=submitLocalJob(job);
-      if(!submitted&&navigator.serviceWorker&&navigator.serviceWorker.ready){
-        navigator.serviceWorker.ready.then(registration=>{
-          if(registration.sync&&registration.sync.register){
-            registration.sync.register('sync-face-registrations').catch(()=>{});
-          }
-        }).catch(()=>{});
-      }
-      showLocalSaved();
     }
 
     function closeCameraTab(){
@@ -459,13 +371,13 @@
       window.close();
     }
 
-    function showLocalSaved(){
+    function showSubmissionAccepted(){
       stop();
-      $('resultTitle').textContent='Đã lưu trên điện thoại';
-      $('resultText').textContent='Có thể tiếp tục làm việc. Dữ liệu sẽ tự đồng bộ với Google.';
+      $('resultTitle').textContent='Đã gửi dữ liệu';
+      $('resultText').textContent='WebApp đang hoàn tất lưu ảnh và 5 mẫu khuôn mặt.';
       $('resultOverlay').classList.add('show');
-      try{if(window.opener)window.opener.postMessage({type:'FACE_REGISTRATION_LOCAL_SAVED',token,studentName},'*')}catch(ignored){}
-      setTimeout(closeCameraTab,1200);
+      try{if(window.opener)window.opener.postMessage({type:'FACE_REGISTRATION_SUBMITTED',token},'*')}catch(ignored){}
+      setTimeout(closeCameraTab,1500);
     }
 
     function stop(){
@@ -480,7 +392,7 @@
     $('fallbackInput').addEventListener('change',event=>processFallbackPhoto(event.target.files&&event.target.files[0]));
     $('resultClose').addEventListener('click',closeCameraTab);
     $('capture').addEventListener('click',capture);$('finish').addEventListener('click',finish);
-    window.addEventListener('beforeunload',stop);renderProgress();preparePwa();
+    window.addEventListener('beforeunload',stop);renderProgress();
     preparePage().catch(error=>{setMessage(error.message||String(error));$('instruction').textContent='Không thể chuẩn bị trang camera';$('startCamera').disabled=true;});
   </script>
 </body>
