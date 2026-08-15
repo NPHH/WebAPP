@@ -51,7 +51,7 @@
     <div class="progress" id="progress"></div>
     <div class="message" id="message">Đang nạp mô hình nhận diện...</div>
     <div class="actions" id="actions">
-      <button id="startCamera" type="button">Mở camera</button>
+      <button id="startCamera" type="button" disabled>Đang mở camera...</button>
       <button id="fallbackCapture" type="button">Chụp bằng camera điện thoại</button>
       <button id="capture" type="button" disabled>Chụp mẫu</button>
       <button id="finish" type="button" disabled>Hoàn tất</button>
@@ -127,9 +127,11 @@
         enableFallback('Trình duyệt này không hỗ trợ camera trực tuyến. Hãy dùng camera điện thoại để chụp 5 mẫu.');
         return;
       }
-      $('instruction').textContent='Bấm Mở camera để bắt đầu';
-      setMessage('Trên iPhone, hãy chọn Cho phép khi Safari hỏi quyền camera.');
-      $('startCamera').disabled=false;
+      // Tự mở ngay khi trang sẵn sàng. Nếu trình duyệt chặn, openCamera() sẽ
+      // tự chuyển sang chế độ chụp bằng camera hệ thống.
+      $('instruction').textContent='Đang mở camera...';
+      setMessage('Nếu điện thoại hỏi quyền camera, hãy chọn Cho phép.');
+      await openCamera();
     }
 
     /**
