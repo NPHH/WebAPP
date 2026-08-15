@@ -23,8 +23,11 @@
     .actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:8px}
     .actions.camera-ready #startCamera{display:none}
     .actions:not(.camera-ready) #capture,.actions:not(.camera-ready) #finish{display:none}
+    .actions.fallback-mode #startCamera,.actions.fallback-mode #capture{display:none}
+    .actions.fallback-mode #fallbackCapture,.actions.fallback-mode #finish{display:block}
     button{border:0;border-radius:13px;padding:13px 8px;font-size:13px;font-weight:700}
     #startCamera{grid-column:1/-1;background:#fff;color:var(--navy)}
+    #fallbackCapture{display:none;background:#fff;color:var(--navy)}
     #capture{background:#fff;color:var(--navy)} #finish{background:var(--teal);color:#fff} button:disabled{opacity:.42}
     canvas{display:none}
   </style>
@@ -45,8 +48,10 @@
     <div class="message" id="message">Đang nạp mô hình nhận diện...</div>
     <div class="actions" id="actions">
       <button id="startCamera" type="button">Mở camera</button>
+      <button id="fallbackCapture" type="button">Chụp bằng camera điện thoại</button>
       <button id="capture" type="button" disabled>Chụp mẫu</button>
       <button id="finish" type="button" disabled>Hoàn tất</button>
+      <input id="fallbackInput" type="file" accept="image/*" capture="user" hidden>
     </div>
   </footer>
 
@@ -58,7 +63,7 @@
     const MODEL_URL='https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights';
     const params=new URLSearchParams(location.search);
     const token=params.get('token')||'';
-    const returnOrigin=params.get('returnOrigin')||'';
+    const submitUrl=params.get('submitUrl')||'';
     const studentName=params.get('studentName')||'Học sinh';
     const instructions=[
       'Mẫu 1/5 · Nhìn thẳng vào camera',
@@ -67,12 +72,20 @@
       'Mẫu 4/5 · Hơi ngẩng mặt',
       'Mẫu 5/5 · Hơi cúi mặt'
     ];
-    let stream=null,vectors=[],portraitDataUrl='',busy=false,modelsReady=false;
+    let stream=null,vectors=[],portraitDataUrl='',busy=false,modelsReady=false,uploadBusy=false;
     let modelsPromise=null;
     const $=id=>document.getElementById(id);
     $('studentName').textContent=studentName;
 
     function setMessage(text){$('message').textContent=text}
+    function enableFallback(message){
+      stop();
+      $('actions').classList.remove('camera-ready');
+      $('actions').classList.add('fallback-mode');
+      $('instruction').textContent='Dùng camera điện thoại để chụp từng mẫu';
+      setMessage(message||'Trình duyệt không mở được camera trực tuyến. Hãy chụp lần lượt 5 ảnh.');
+      $('fallbackCapture').disabled=false;
+    }
     function renderProgress(){
       $('progress').innerHTML='';
       for(let i=0;i<5;i++){
@@ -99,15 +112,16 @@
     }
 
     async function preparePage(){
-      if(!token||!returnOrigin||!window.opener){
+      if(!token||!submitUrl){
         throw new Error('Trang camera phải được mở từ WebApp điểm danh.');
       }
       if(typeof faceapi==='undefined') throw new Error('Không tải được thư viện nhận diện.');
-      if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
-        throw new Error('Trình duyệt này không hỗ trợ mở camera.');
-      }
       // Bắt đầu nạp mô hình ngay để giảm thời gian chờ sau khi camera mở.
       loadModels().catch(error=>setMessage('Không tải được mô hình nhận diện: '+(error.message||error)));
+      if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+        enableFallback('Trình duyệt này không hỗ trợ camera trực tuyến. Hãy dùng camera điện thoại để chụp 5 mẫu.');
+        return;
+      }
       $('instruction').textContent='Bấm Mở camera để bắt đầu';
       setMessage('Trên iPhone, hãy chọn Cho phép khi Safari hỏi quyền camera.');
       $('startCamera').disabled=false;
@@ -123,10 +137,19 @@
       $('startCamera').disabled=true;
       setMessage('Đang mở camera trước...');
       try{
-        stream=await navigator.mediaDevices.getUserMedia({
-          video:{facingMode:{ideal:'user'},width:{ideal:720},height:{ideal:960}},
-          audio:false
-        });
+        try{
+          stream=await navigator.mediaDevices.getUserMedia({
+            video:{facingMode:{ideal:'user'},width:{ideal:720},height:{ideal:960}},
+            audio:false
+          });
+        }catch(firstError){
+          // Một số trình duyệt Android cũ không hiểu facingMode/kích thước ideal.
+          // Chỉ thử cấu hình đơn giản khi lỗi do ràng buộc hoặc không tìm thấy camera;
+          // không lặp lại nếu người dùng đã từ chối quyền.
+          const retryable=['OverconstrainedError','ConstraintNotSatisfiedError','NotFoundError'];
+          if(retryable.indexOf(String(firstError&&firstError.name||''))===-1)throw firstError;
+          stream=await navigator.mediaDevices.getUserMedia({video:true,audio:false});
+        }
         const video=$('video');
         video.setAttribute('playsinline','');
         video.muted=true;
@@ -144,17 +167,68 @@
         setMessage('Đưa một khuôn mặt vào giữa khung rồi bấm Chụp mẫu.');
         $('capture').disabled=false;
       }catch(error){
-        stop();
-        $('actions').classList.remove('camera-ready');
-        $('instruction').textContent='Chưa mở được camera';
         const name=String(error&&error.name||'');
         if(name==='NotAllowedError'||name==='SecurityError'){
-          setMessage('Safari đang chặn camera. Vào aA → Cài đặt trang web → Camera → Cho phép, rồi bấm Mở camera lại.');
+          enableFallback('Trình duyệt đang chặn camera trực tuyến. Có thể tiếp tục bằng camera điện thoại.');
         }else{
-          setMessage(error.message||String(error));
+          enableFallback((error.message||String(error))+' Có thể tiếp tục bằng camera điện thoại.');
         }
-        $('startCamera').disabled=false;
       }finally{busy=false}
+    }
+
+    /**
+     * Đường dự phòng cho trình duyệt cũ hoặc trình duyệt tích hợp: mở ứng dụng
+     * camera của điện thoại bằng input capture, sau đó nhận diện trên ảnh vừa chụp.
+     */
+    function openFallbackCamera(){
+      if(busy||vectors.length>=5)return;
+      $('fallbackInput').value='';
+      $('fallbackInput').click();
+    }
+
+    async function processFallbackPhoto(file){
+      if(!file||busy||vectors.length>=5)return;
+      busy=true;$('fallbackCapture').disabled=true;
+      setMessage('Đang kiểm tra ảnh mẫu '+(vectors.length+1)+'...');
+      let objectUrl='';
+      try{
+        await loadModels();
+        objectUrl=URL.createObjectURL(file);
+        const image=new Image();
+        await new Promise((resolve,reject)=>{
+          image.onload=resolve;
+          image.onerror=()=>reject(new Error('Không đọc được ảnh vừa chụp.'));
+          image.src=objectUrl;
+        });
+        const canvas=$('canvas');
+        const scale=Math.min(1,640/image.naturalWidth);
+        canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));
+        canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));
+        canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
+        const detections=await faceapi.detectAllFaces(canvas,new faceapi.TinyFaceDetectorOptions({inputSize:320,scoreThreshold:.5})).withFaceLandmarks().withFaceDescriptors();
+        if(!detections.length)throw new Error('Không thấy khuôn mặt. Hãy chụp lại nơi đủ sáng.');
+        if(detections.length>1)throw new Error('Ảnh có nhiều khuôn mặt. Chỉ chụp một học sinh.');
+        const box=detections[0].detection.box;
+        if(box.width<canvas.width*.22||box.height<canvas.height*.22)throw new Error('Khuôn mặt quá xa. Hãy chụp gần hơn.');
+        vectors.push(Array.from(detections[0].descriptor).map(v=>Number(v.toFixed(7))));
+        if(vectors.length===1)portraitDataUrl=canvas.toDataURL('image/jpeg',.82);
+        renderProgress();
+        if(vectors.length<5){
+          $('instruction').textContent=instructions[vectors.length];
+          setMessage('Đã chụp '+vectors.length+'/5 mẫu. Bấm nút để chụp tư thế tiếp theo.');
+        }else{
+          $('instruction').textContent='Đã đủ 5 mẫu khuôn mặt';
+          setMessage('Bấm Hoàn tất để lưu dữ liệu.');
+          $('fallbackCapture').disabled=true;
+          $('finish').disabled=false;
+        }
+      }catch(error){
+        setMessage('Chưa chụp được mẫu '+(vectors.length+1)+': '+(error.message||String(error)));
+      }finally{
+        if(objectUrl)URL.revokeObjectURL(objectUrl);
+        busy=false;
+        if(vectors.length<5)$('fallbackCapture').disabled=false;
+      }
     }
 
     async function capture(){
@@ -192,13 +266,65 @@
       finally{busy=false;$('capture').disabled=vectors.length>=5}
     }
 
+    /**
+     * Gửi qua biểu mẫu vào iframe ẩn. Cách này không cần CORS và không cần
+     * window.opener, nên dùng được khi Safari mở camera thành một thẻ độc lập.
+     */
     function finish(){
-      if(vectors.length!==5||!portraitDataUrl)return;
-      $('finish').disabled=true;setMessage('Đang chuyển dữ liệu về WebApp...');
-      window.opener.postMessage({type:'FACE_REGISTRATION_RESULT',token,vectors,portraitDataUrl},returnOrigin);
-      setMessage('Đã chuyển xong. Có thể đóng cửa sổ này.');
-      stop();setTimeout(()=>window.close(),800);
+      if(vectors.length!==5||!portraitDataUrl||uploadBusy)return;
+      uploadBusy=true;
+      $('finish').disabled=true;
+      $('capture').disabled=true;
+      setMessage('Đang lưu ảnh và 5 mẫu khuôn mặt về hệ thống...');
+
+      let target=document.getElementById('uploadTarget');
+      if(!target){
+        target=document.createElement('iframe');
+        target.id='uploadTarget';
+        target.name='faceUploadTarget';
+        target.hidden=true;
+        document.body.appendChild(target);
+      }
+      const form=document.createElement('form');
+      form.method='POST';
+      form.action=submitUrl;
+      form.target='faceUploadTarget';
+      form.style.display='none';
+      const fields={
+        action:'faceRegistrationUpload',
+        token:token,
+        vectors:JSON.stringify(vectors),
+        portraitDataUrl:portraitDataUrl
+      };
+      Object.keys(fields).forEach(name=>{
+        const input=document.createElement('input');
+        input.type='hidden';input.name=name;input.value=fields[name];
+        form.appendChild(input);
+      });
+      document.body.appendChild(form);
+      form.submit();
+      form.remove();
     }
+
+    // Apps Script trả kết quả về từ iframe ẩn. Chỉ nhận đúng mã phiên hiện tại.
+    window.addEventListener('message',event=>{
+      const data=event.data||{};
+      if(data.type!=='FACE_UPLOAD_RESULT'||String(data.token||'')!==token)return;
+      uploadBusy=false;
+      if(data.ok){
+        stop();
+        $('instruction').textContent='Đăng ký thành công';
+        setMessage(data.message||'Đã lưu ảnh và 5 mẫu khuôn mặt. Hãy quay lại WebApp.');
+        $('finish').textContent='Đã lưu';
+        $('finish').disabled=true;
+        setTimeout(()=>window.close(),1200);
+      }else{
+        $('instruction').textContent='Chưa lưu được dữ liệu';
+        setMessage(data.message||'Lưu thất bại. Hãy thử lại.');
+        $('finish').disabled=false;
+        $('capture').disabled=vectors.length>=5;
+      }
+    });
 
     function stop(){
       if(stream){stream.getTracks().forEach(track=>track.stop());stream=null}
@@ -206,6 +332,8 @@
       if(video)video.srcObject=null;
     }
     $('startCamera').addEventListener('click',openCamera);
+    $('fallbackCapture').addEventListener('click',openFallbackCamera);
+    $('fallbackInput').addEventListener('change',event=>processFallbackPhoto(event.target.files&&event.target.files[0]));
     $('capture').addEventListener('click',capture);$('finish').addEventListener('click',finish);
     window.addEventListener('beforeunload',stop);renderProgress();
     preparePage().catch(error=>{setMessage(error.message||String(error));$('instruction').textContent='Không thể chuẩn bị trang camera';$('startCamera').disabled=true;});
