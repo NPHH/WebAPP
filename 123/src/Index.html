@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+  <base target="_top">
+
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>Bài 5 - Array và Object</title>
+
+  <?!= include("CSS"); ?>
+
+</head>
+
+
+<body>
+
+  <div class="app">
+
+
+    <!-- =========================
+         HEADER
+         ========================= -->
+
+    <header class="app-header">
+
+      <h1>
+        Bài 5 - Array và Object
+      </h1>
+
+    </header>
+
+
+    <!-- =========================
+         NỘI DUNG
+         ========================= -->
+
+    <main class="app-content">
+
+
+      <section class="student-card">
+
+
+        <div
+          id="studentSTT"
+          class="student-stt"
+        >
+          STT
+        </div>
+
+
+        <h2
+          id="studentName"
+          class="student-name"
+        >
+          Chưa có học sinh
+        </h2>
+
+
+        <p
+          id="studentClass"
+          class="student-class"
+        >
+          Lớp
+        </p>
+
+
+        <p
+          id="studentId"
+          class="student-id"
+        >
+          Mã sinh viên
+        </p>
+
+
+        <div class="student-controls">
+
+          <button
+            id="btnPrevious"
+            type="button"
+          >
+            ← Trước
+          </button>
+
+
+          <button
+            id="btnNext"
+            type="button"
+          >
+            Tiếp →
+          </button>
+
+        </div>
+
+
+      </section>
+
+
+      <!-- =========================
+           THÔNG TIN ARRAY
+           ========================= -->
+
+      <section class="info-card">
+
+        <h3>
+          Thông tin Array
+        </h3>
+
+
+        <p>
+          Số học sinh:
+          <strong id="studentCount">
+            0
+          </strong>
+        </p>
+
+
+        <p>
+          Index hiện tại:
+          <strong id="currentIndex">
+            0
+          </strong>
+        </p>
+
+      </section>
+
+
+    </main>
+
+
+  </div>
+
+
+  <?!= include("JS"); ?>
+
+</body>
+
+</html>
