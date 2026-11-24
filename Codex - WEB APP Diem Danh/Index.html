@@ -1,0 +1,591 @@
+<!--
+WEBAPP ĐIỂM DANH — BỐ CỤC GIAO DIỆN
+Code.gs    : xử lý máy chủ, đọc/ghi Google Sheets và Drive.
+Index.html : nội dung, các trang và hộp thoại.
+CCS.html   : màu sắc, bố cục và kiểu hiển thị.
+Java.html  : thao tác người dùng, tải dữ liệu và gọi máy chủ.
+
+TRIỂN KHAI: tạo đủ 4 tệp trong cùng dự án Apps Script.
+Tạo CCS và Java dưới dạng HTML, giữ nguyên các thẻ style/script bên trong.
+Code.gs dùng template để ghép CCS và Java vào Index.
+Giữ nguyên id của phần tử và tên hàm gọi máy chủ.
+Thay đổi số giờ/buổi: HOURS_PER_SESSION trong Code.gs và loadAbsenceStats trong Java.html.
+Lưu tất cả tệp rồi triển khai phiên bản WebApp mới.
+-->
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<base target="_top">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Điểm danh học sinh</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/dist/face-api.js"></script>
+<?!= include_('CCS'); ?>
+</head>
+<body>
+
+<div>
+  <div class="device">
+
+<!-- SECTION: 01 | ĐIỂM DANH: CHỌN LỚP / HỒ SƠ / NGÀY / TRẠNG THÁI -->
+    <div id="pageAttendance" class="app-page active-page">
+      <div class="tabbar-top">
+        <div class="tabbar-title">WebAPP Điểm Danh</div>
+      <div class="tabbar-actions">
+        <div class="quick-zalo-btn" role="img" aria-label="Zalo">
+          <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/><path d="M8 10h.01M12 10h.01M16 10h.01"/></svg>
+        </div>
+        <div class="camera-icon-btn" role="img" aria-label="Camera">
+          <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="tabbar">
+      <div class="filter-stack">
+        <div class="select-wrap">
+          <svg class="select-icon" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5-10-5z"/><path d="M6 12v5c0 1.66 2.69 3 6 3s6-1.34 6-3v-5"/></svg>
+          <select class="filter-select" id="classSelect">
+            <option value="">Đang tải lớp...</option>
+          </select>
+          <svg class="select-chevron" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </div>
+
+        <div class="select-wrap">
+          <svg class="select-icon" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <select class="filter-select" id="teacherSelect" disabled>
+            <option value="">Chọn lớp trước</option>
+          </select>   
+          <svg class="select-chevron" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </div>
+
+        <div class="select-wrap">
+          <svg class="select-icon" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          <select class="filter-select" id="subjectSelect" disabled>
+            <option value="">Chọn lớp trước</option>
+          </select>
+          <svg class="select-chevron" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+
+      <div class="session-toggle">
+        <div class="session-btn active">
+          <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+          Buổi sáng
+        </div>
+        <div class="session-btn">
+          <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          Buổi chiều
+        </div>
+      </div>
+      <div class="session-hint">
+        Tự động chọn theo giờ hệ thống · chạm để đổi buổi nếu cần điểm danh bù
+      </div>
+
+      <div class="eyebrow">Hồ sơ học sinh</div>
+
+      <div class="student-card" id="studentCard">
+        <div class="avatar" id="studentAvatar" role="button" tabindex="0" aria-label="Chưa có ảnh để xem" aria-disabled="true">
+          <span class="avatar-initials" id="studentAvatarInitials">--</span>
+          <img id="studentAvatarImage" alt="Ảnh học sinh" loading="eager" decoding="async">
+        </div>
+        <div class="student-meta">
+          <h2 id="studentName">Chọn lớp để tải học sinh</h2>
+          <p id="studentMeta">—</p>
+          <span class="id-pill" id="studentId">—</span>
+        </div>
+        <button type="button" class="quick-student-list-btn" id="studentQuickListButton" disabled aria-label="Mở danh sách học sinh">
+          <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3" cy="6" r="1"/><circle cx="3" cy="12" r="1"/><circle cx="3" cy="18" r="1"/></svg>
+          Danh sách
+        </button>
+      </div>
+
+      <div class="date-picker-row">
+        <div class="date-info">
+          <span class="date-badge" id="dateBadge">Hôm nay</span>
+          <span class="date-value" id="dateValueText">—</span>
+        </div>
+        <div class="date-input-wrap">
+          <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          <input type="date" class="date-input" id="attendanceDate">
+        </div>
+      </div>
+
+      <div class="status-row">
+        <div class="status-btn present" data-status="PRESENT"><span class="dot"></span>Có mặt</div>
+        <div class="status-btn absent" data-status="ABSENT"><span class="dot"></span>Vắng</div>
+        <div class="status-btn excused" data-status="EXCUSED"><span class="dot"></span>Có phép</div>
+      </div>
+      <div id="attendanceStatus" style="text-align:center;margin-top:8px;font-size:10.5px;color:var(--ink-soft);font-weight:600;">
+        Chưa điểm danh
+      </div>
+
+      <div class="contact-groups">
+
+        <div class="contact-group student">
+          <div class="contact-group-head">
+            <div class="avatar-sm">HS</div>
+            <div class="who">Học sinh<span id="contactStudentName">—</span></div>
+          </div>
+          <div class="contact-row">
+            <div class="contact-btn">
+              <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+              Gọi điện
+            </div>
+            <div class="contact-btn zalo">
+              <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+              Zalo
+            </div>
+            <div class="contact-btn">
+              <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+              Tin nhắn
+            </div>
+          </div>
+        </div>
+
+        <div class="contact-group father">
+          <div class="contact-group-head">
+            <div class="avatar-sm">CH</div>
+            <div class="who">Cha<span id="contactFatherName">—</span></div>
+          </div>
+          <div class="contact-row">
+            <div class="contact-btn">
+              <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+              Gọi điện
+            </div>
+            <div class="contact-btn zalo">
+              <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+              Zalo
+            </div>
+            <div class="contact-btn">
+              <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+              Tin nhắn
+            </div>
+          </div>
+        </div>
+
+        <div class="contact-group mother">
+          <div class="contact-group-head">
+            <div class="avatar-sm">ME</div>
+            <div class="who">Mẹ<span id="contactMotherName">—</span></div>
+          </div>
+          <div class="contact-row">
+            <div class="contact-btn">
+              <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+              Gọi điện
+            </div>
+            <div class="contact-btn zalo">
+              <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+              Zalo
+            </div>
+            <div class="contact-btn">
+              <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+              Tin nhắn
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          Thông tin môn học
+        </div>
+        <div class="profile-body subject-profile-body">
+          <div class="info-row"><span class="k">Tên môn học</span><span class="v" id="subjectInfoName">—</span></div>
+          <div class="info-row"><span class="k">Học kỳ</span><span class="v" id="subjectInfoHocKy">—</span></div>
+          <div class="info-row"><span class="k">Tổng số giờ</span><span class="v" id="subjectInfoTongSoGio">—</span></div>
+          <div class="info-row subject-progress-row" data-subject-field="NgayBatDau"><span class="k">Ngày bắt đầu</span><span class="v" id="subjectInfoNgayBatDau">—</span></div>
+          <div class="info-row subject-progress-row" data-subject-field="TienDo"><span class="k">Tiến độ giảng dạy</span><span class="v" id="subjectInfoTienDo">—</span></div>
+          <div class="info-row"><span class="k">Lý thuyết</span><span class="v" id="subjectInfoDanhSachMH">—</span></div>
+          <div class="info-row"><span class="k">Thực hành</span><span class="v" id="subjectInfoThucHanh">—</span></div>
+          <div class="info-row"><span class="k">Thi</span><span class="v" id="subjectInfoThi">—</span></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          <span id="absenceStatsTitle">Thống kê tháng: — buổi</span>
+          <span class="cap" id="absenceStatsSubject">Chọn môn học</span>
+        </div>
+        <div class="stats-grid">
+          <div class="stat excused">
+            <div class="num" id="excusedAbsenceCount">—</div>
+            <div class="lbl" id="excusedAbsenceLabel">Buổi vắng có phép - — giờ</div>
+          </div>
+          <div class="stat absent">
+            <div class="num" id="unexcusedAbsenceCount">—</div>
+            <div class="lbl" id="unexcusedAbsenceLabel">Buổi vắng không phép - — giờ</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          Thông tin lý lịch học sinh
+        </div>
+        <div class="profile-body">
+          <div class="info-row"><span class="k">Ngày sinh</span><span class="v" id="profileBirthDate">—</span></div>
+          <div class="info-row"><span class="k">CCCD</span><span class="v" id="profileCCCD">—</span></div>
+          <div class="info-row"><span class="k">BHYT</span><span class="v" id="profileBHYT">—</span></div>
+          <div class="info-row"><span class="k">Cha</span><span class="v" id="profileFather">—</span></div>
+          <div class="info-row"><span class="k">Mẹ</span><span class="v" id="profileMother">—</span></div>
+          <div class="info-row"><span class="k">Địa chỉ</span><span class="v" id="profileAddress">—</span></div>
+          <div class="info-row profile-note-row" id="profileNoteRow" role="button" tabindex="0" aria-label="Chỉnh sửa ghi chú học sinh">
+            <span class="k">Ghi chú</span><span class="v" id="profileNote"></span>
+            <svg class="profile-note-edit" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    </div>
+
+<!-- SECTION: 02 | CÀI ĐẶT -->
+    <div id="pageSettings" class="app-page" aria-hidden="true">
+      <div class="settings-page">
+        <section id="settingsMenuPanel" class="settings-panel active">
+          <div class="settings-header">
+            <h2>Cài đặt</h2>
+            <p>Chọn chức năng cần sử dụng.</p>
+          </div>
+
+          <div class="settings-menu">
+            <button type="button" class="settings-item" data-settings-target="settingsFacePanel">
+              <span class="settings-item-icon" aria-hidden="true"><svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m13-5h3a2 2 0 0 1 2 2v3M3 16v3a2 2 0 0 0 2 2h3m8 0h3a2 2 0 0 0 2-2v-3"/><path d="M9 9h.01M15 9h.01M12 10v3m-4 3a6 6 0 0 0 8 0"/></svg></span>
+              <span class="settings-item-copy"><span class="settings-item-title">Đăng ký khuôn mặt</span></span>
+              <svg class="settings-chevron" fill="none" viewBox="0 0 24 24" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+            <button type="button" class="settings-item" data-settings-target="settingsAvatarPanel">
+              <span class="settings-item-icon" aria-hidden="true"><svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="12" cy="9" r="3"/><path d="M6 20v-1a6 6 0 0 1 12 0v1"/></svg></span>
+              <span class="settings-item-copy"><span class="settings-item-title">Ảnh đại diện</span></span>
+              <svg class="settings-chevron" fill="none" viewBox="0 0 24 24" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+            <button type="button" class="settings-item" data-settings-target="settingsImportPanel">
+              <span class="settings-item-icon">
+                <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="m17 8-5-5-5 5"/><path d="M5 21h14a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2"/></svg>
+              </span>
+              <span class="settings-item-copy">
+                <span class="settings-item-title">Import dữ liệu</span>
+                <span class="settings-item-note">Nhập dữ liệu điểm danh và báo cáo</span>
+              </span>
+              <svg class="settings-chevron" fill="none" viewBox="0 0 24 24" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+            <button type="button" class="settings-item" data-settings-target="settingsExportPanel">
+              <span class="settings-item-icon" aria-hidden="true"><svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m-5-5 5 5 5-5M3 16v3a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3"/></svg></span>
+              <span class="settings-item-copy"><span class="settings-item-title">Export dữ liệu</span></span>
+              <svg class="settings-chevron" fill="none" viewBox="0 0 24 24" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+            <button type="button" class="settings-item" data-settings-target="settingsGuidePanel">
+              <span class="settings-item-icon" aria-hidden="true"><svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v16M3 3h5a4 4 0 0 1 4 2 4 4 0 0 1 4-2h5v16h-5a4 4 0 0 0-4 2 4 4 0 0 0-4-2H3Z"/></svg></span>
+              <span class="settings-item-copy"><span class="settings-item-title">Hướng dẫn sử dụng</span></span>
+              <svg class="settings-chevron" fill="none" viewBox="0 0 24 24" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+            <div class="settings-item future" aria-label="Chức năng khác">
+              <span class="settings-item-icon" aria-hidden="true"><svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><path d="M17.5 14v7M14 17.5h7"/></svg></span>
+              <span class="settings-item-copy"><span class="settings-item-title">Chức năng khác</span></span>
+            </div>
+          </div>
+        </section>
+
+<!-- SECTION: 03 | ĐĂNG KÝ KHUÔN MẶT -->
+        <section id="settingsFacePanel" class="settings-panel">
+          <div class="settings-panel-top">
+            <button type="button" class="settings-back" aria-label="Quay lại Cài đặt"><svg fill="none" viewBox="0 0 24 24" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg></button>
+            <h2 class="settings-panel-title">Đăng ký khuôn mặt</h2>
+          </div>
+          <div class="feature-card face-form">
+            <select id="faceClassSelect" class="face-select"><option value="">Chọn lớp</option></select>
+            <div id="faceSummary" class="face-summary">
+              <span>Đã đăng ký: 0</span><span>Chưa đăng ký: 0</span>
+            </div>
+            <div id="faceStudentList" class="face-student-list">
+              <div class="face-message">Chọn lớp để xem danh sách học sinh.</div>
+            </div>
+
+            <div id="faceScanArea" class="face-scan-area">
+              <div id="faceScanStudent" class="face-scan-student"></div>
+              <div id="faceGuide" class="face-guide">Quay video khuôn mặt</div>
+              <div class="face-pose-sequence">Trong một video 8–12 giây, thực hiện chậm:<br><strong>Nhìn thẳng → trái → phải → ngẩng lên → cúi xuống</strong></div>
+              <div class="face-analysis-progress"><div id="faceAnalysisBar" class="face-analysis-bar"></div></div>
+              <div class="face-actions">
+                <button type="button" id="faceVideoButton" class="face-btn">Quay video Face ID</button>
+                <button type="button" id="faceCancelButton" class="face-btn secondary">Hủy</button>
+              </div>
+              <div id="faceMessage" class="face-message">Video chỉ xử lý trên thiết bị, không lưu lên Drive.</div>
+            </div>
+            <video id="faceVideoDecoder" muted playsinline preload="metadata" hidden></video>
+            <canvas id="faceCaptureCanvas" hidden></canvas>
+            <input id="faceVideoInput" type="file" accept="video/*" capture="user" hidden>
+          </div>
+        </section>
+
+<!-- SECTION: 04 | ẢNH ĐẠI DIỆN -->
+        <section id="settingsAvatarPanel" class="settings-panel">
+          <div class="settings-panel-top">
+            <button type="button" class="settings-back" aria-label="Quay lại Cài đặt"><svg fill="none" viewBox="0 0 24 24" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg></button>
+            <h2 class="settings-panel-title">Ảnh đại diện</h2>
+          </div>
+          <div class="feature-card face-form">
+            <select id="avatarClassSelect" class="face-select"><option value="">Chọn lớp</option></select>
+            <div id="avatarSummary" class="face-summary">
+              <span>Số ảnh đại diện: 0/0 ảnh</span>
+            </div>
+            <div id="avatarMessage" class="face-message avatar-status">Trạng thái: Chọn lớp để kiểm tra ảnh đại diện.</div>
+            <div id="avatarStudentList" class="face-student-list">
+              <div class="face-message">Chọn lớp để xem danh sách học sinh.</div>
+            </div>
+            <img id="avatarPhotoDecoder" alt="" hidden>
+            <canvas id="avatarCaptureCanvas" hidden></canvas>
+            <input id="avatarPhotoInput" type="file" accept="image/*" capture="user" hidden>
+          </div>
+        </section>
+
+<!-- SECTION: 05 | IMPORT DỮ LIỆU -->
+        <section id="settingsImportPanel" class="settings-panel">
+          <div class="settings-panel-top">
+            <button type="button" class="settings-back" aria-label="Quay lại Cài đặt"><svg fill="none" viewBox="0 0 24 24" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg></button>
+            <h2 class="settings-panel-title">Import dữ liệu</h2>
+          </div>
+          <form id="importLinksForm" class="feature-card import-links-form">
+            <div class="import-selectors">
+              <label for="importDepartment">Khoa<select id="importDepartment" required disabled><option value="">Đang tải danh sách...</option></select></label>
+              <label for="importClass">Lớp<select id="importClass" required disabled><option value="">Chọn khoa trước</option></select></label>
+            </div>
+            <fieldset id="importLinkFields" disabled>
+              <label for="importZalo">Zalo điểm danh<input id="importZalo" type="url" placeholder="https://zalo.me/g/..." autocomplete="off" maxlength="4000"></label>
+              <h3 class="import-month-heading">Link báo cáo theo tháng</h3>
+              <div class="import-month-grid">
+                <label for="importMonth1">Tháng 1<input id="importMonth1" type="url" placeholder="Dán link tháng 1" autocomplete="off" maxlength="4000"></label>
+                <label for="importMonth2">Tháng 2<input id="importMonth2" type="url" placeholder="Dán link tháng 2" autocomplete="off" maxlength="4000"></label>
+                <label for="importMonth3">Tháng 3<input id="importMonth3" type="url" placeholder="Dán link tháng 3" autocomplete="off" maxlength="4000"></label>
+                <label for="importMonth4">Tháng 4<input id="importMonth4" type="url" placeholder="Dán link tháng 4" autocomplete="off" maxlength="4000"></label>
+                <label for="importMonth5">Tháng 5<input id="importMonth5" type="url" placeholder="Dán link tháng 5" autocomplete="off" maxlength="4000"></label>
+                <label for="importMonth6">Tháng 6<input id="importMonth6" type="url" placeholder="Dán link tháng 6" autocomplete="off" maxlength="4000"></label>
+                <label for="importMonth7">Tháng 7<input id="importMonth7" type="url" placeholder="Dán link tháng 7" autocomplete="off" maxlength="4000"></label>
+                <label for="importMonth8">Tháng 8<input id="importMonth8" type="url" placeholder="Dán link tháng 8" autocomplete="off" maxlength="4000"></label>
+                <label for="importMonth9">Tháng 9<input id="importMonth9" type="url" placeholder="Dán link tháng 9" autocomplete="off" maxlength="4000"></label>
+                <label for="importMonth10">Tháng 10<input id="importMonth10" type="url" placeholder="Dán link tháng 10" autocomplete="off" maxlength="4000"></label>
+                <label for="importMonth11">Tháng 11<input id="importMonth11" type="url" placeholder="Dán link tháng 11" autocomplete="off" maxlength="4000"></label>
+                <label for="importMonth12">Tháng 12<input id="importMonth12" type="url" placeholder="Dán link tháng 12" autocomplete="off" maxlength="4000"></label>
+              </div>
+            </fieldset>
+            <p id="importLinksMessage" class="import-message" role="status" aria-live="polite">Chọn khoa và lớp để nhập link.</p>
+            <button type="submit" id="importLinksSave" class="face-btn" disabled>Save · Lưu liên kết</button>
+          </form>
+        </section>
+
+<!-- SECTION: 05 | XUẤT DỮ LIỆU -->
+        <section id="settingsExportPanel" class="settings-panel">
+          <div class="settings-panel-top">
+            <button type="button" class="settings-back" aria-label="Quay lại Cài đặt"><svg fill="none" viewBox="0 0 24 24" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg></button>
+            <h2 class="settings-panel-title">Export dữ liệu</h2>
+          </div>
+          <div class="feature-card"><span class="feature-status">Đang chuẩn bị</span><br><strong>Màn hình Export đã được tách riêng.</strong><br>Các lựa chọn lớp, thời gian, loại báo cáo và định dạng xuất sẽ được bổ sung sau.</div>
+        </section>
+
+<!-- SECTION: 06 | HƯỚNG DẪN SỬ DỤNG -->
+        <section id="settingsGuidePanel" class="settings-panel">
+          <div class="settings-panel-top">
+            <button type="button" class="settings-back" aria-label="Quay lại Cài đặt"><svg fill="none" viewBox="0 0 24 24" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg></button>
+            <h2 class="settings-panel-title">Hướng dẫn sử dụng</h2>
+          </div>
+
+          <div class="guide-document">
+            <div class="guide-document-title">HƯỚNG DẪN SỬ DỤNG</div>
+            <div class="guide-document-subtitle">WEBAPP ĐIỂM DANH</div>
+            <div class="guide-document-audience">Tài liệu dành cho giáo viên</div>
+
+            <div class="guide-content-heading">Nội dung</div>
+            <ul class="guide-toc">
+              <li>1. Điểm danh</li>
+              <li>2. Một số chức năng phụ</li>
+            </ul>
+
+            <section class="guide-document-section">
+              <h3>1. ĐIỂM DANH</h3>
+              <div class="guide-document-subsection">
+                <h4>1.1. Chọn lớp, giáo viên và môn học</h4>
+                <p>Tiến hành chọn theo thứ tự: Chọn lớp → Chọn giáo viên → Chọn môn học.</p>
+                <figure class="guide-figure"><img class="guide-image" loading="lazy" src="https://drive.google.com/thumbnail?id=1_4umPckrjDQscj6Mq3WsGgDZy7EVGZNv&amp;sz=w1200" alt="Picture1: Màn hình chọn lớp trên WebApp Điểm Danh"><figcaption class="guide-caption">Picture1 — Màn hình chọn lớp trên WebApp Điểm Danh</figcaption></figure>
+              </div>
+              <div class="guide-document-subsection">
+                <h4>1.2. Chọn buổi học</h4>
+                <p>Phần này web sẽ tự động chọn theo thời gian thực tế khi mở web. Người dùng chỉ cần tự chọn lại buổi học trong trường hợp điểm danh bù.</p>
+                <p>Chọn Buổi sáng / Buổi chiều — tự động theo giờ hệ thống</p>
+                <figure class="guide-figure"><img class="guide-image" loading="lazy" src="https://drive.google.com/thumbnail?id=1gWNZKiI-Uv1YOp7bBeiYwxgcVd-liHQA&amp;sz=w1200" alt="Picture2: Chọn buổi sáng hoặc buổi chiều"><figcaption class="guide-caption">Picture2 — Chọn buổi sáng hoặc buổi chiều</figcaption></figure>
+              </div>
+              <div class="guide-document-subsection">
+                <h4>1.3. Điểm danh thực tế</h4>
+                <p>Chỉ việc bấm vào các nút “Có mặt”, “Vắng”, “Có Phép”. Trạng thái dòng chữ bên dưới cho biết học sinh được điểm danh đã lưu hay chưa.</p>
+                <ul>
+                  <li>Trong trường hợp lớp không vắng ai thì vẫn phải điểm danh ít nhất 1 lần bằng cách bấm nút “Có mặt” để Web lưu lại ngày dạy, người dạy và môn dạy.</li>
+                  <li>Trong lần điểm danh đầu tiên, Web chạy khá chậm; những lần tiếp theo sẽ chạy nhanh hơn.</li>
+                  <li>Để điểm danh học sinh tiếp theo, có thể vuốt màn hình sang trái (tiến) hoặc vuốt sang phải (lùi) ngay tại vị trí khung tên học sinh.</li>
+                  <li>Cũng có thể chọn một học sinh bất kỳ bằng cách bấm vào “Danh sách” và chọn học sinh muốn điểm danh.</li>
+                </ul>
+                <figure class="guide-figure"><img class="guide-image" loading="lazy" src="https://drive.google.com/thumbnail?id=1oB1cfpPhi4CTU7JlzZZDs4wV9JJSJyDr&amp;sz=w1200" alt="Picture3: Hồ sơ học sinh và các nút điểm danh"><figcaption class="guide-caption">Picture3 — Hồ sơ học sinh với các nút Có mặt / Vắng / Có phép</figcaption></figure>
+              </div>
+              <div class="guide-document-subsection">
+                <h4>1.4. Điểm danh bù</h4>
+                <ul>
+                  <li>Bấm vào biểu tượng “Lịch” để chọn ngày cần điểm danh bù.</li>
+                  <li>Tiếp tục chọn “Danh sách” để chọn học sinh cần điểm danh bù.</li>
+                  <li>Tiếp tục chọn “Buổi sáng” hay “Buổi chiều”.</li>
+                  <li>Chọn trạng thái điểm danh phù hợp.</li>
+                </ul>
+              </div>
+            </section>
+
+            <section class="guide-document-section">
+              <h3>2. MỘT SỐ CHỨC NĂNG PHỤ</h3>
+              <div class="guide-document-subsection">
+                <h4>a) Liên hệ phụ huynh</h4>
+                <ul>
+                  <li>Theo thứ tự lần lượt là: gọi bằng Sim, gọi bằng Zalo, nhắn tin bằng Zalo hoặc SMS.</li>
+                  <li>Thông tin học sinh nào có số điện thoại sẽ sáng nổi lên; học sinh nào không có sẽ mờ xuống.</li>
+                  <li>Thông tin số điện thoại phải được cập nhật riêng bằng file Excel, không tự cập nhật được qua web.</li>
+                </ul>
+                <figure class="guide-figure"><img class="guide-image" loading="lazy" src="https://drive.google.com/thumbnail?id=1WdAHkY65jUAP6DU7sESfLW8tVH7okRh3&amp;sz=w1200" alt="Picture4: Các nút liên hệ Học sinh, Cha, Mẹ"><figcaption class="guide-caption">Picture4 — Các nút liên hệ Học sinh / Cha / Mẹ</figcaption></figure>
+              </div>
+              <div class="guide-document-subsection">
+                <h4>b) Xem số lượng học sinh đi học trong một buổi</h4>
+                <p>Chức năng này giúp giáo viên chủ nhiệm (GVCN) biết được số lượng học sinh đi học trong một buổi học.</p>
+                <ul>
+                  <li>Chọn đúng lớp, đúng ngày, đúng buổi, đúng môn.</li>
+                  <li>Bấm vào nút “Danh sách”, đợi khoảng vài giây, nhìn vào bảng: dấu tick tròn xanh là có đi học, dấu x tròn đỏ là vắng, chữ P tròn cam là vắng có phép.</li>
+                </ul>
+                <figure class="guide-figure"><img class="guide-image" loading="lazy" src="https://drive.google.com/thumbnail?id=15NBawJ8pNqykcUmJsB7qceJlskQ4Ikur&amp;sz=w1200" alt="Picture5: Danh sách lớp với trạng thái điểm danh"><figcaption class="guide-caption">Picture5 — Danh sách lớp với trạng thái điểm danh</figcaption></figure>
+              </div>
+              <div class="guide-document-subsection">
+                <h4>c) Thông tin học sinh và môn học</h4>
+                <p>Phần này hiển thị trực quan, nhìn vào là hiểu.</p>
+                <p>Lưu ý: Khi sử dụng chức năng ghi chú không xóa ghi chú của người viết trước đó; hãy xuống dòng để thêm ghi chú mới.</p>
+              </div>
+              <div class="guide-document-subsection">
+                <h4>d) Chụp ảnh đại diện</h4>
+                <p>Chức năng dành cho giáo viên chủ nhiệm, thao tác tương tự như chụp ảnh thẻ.</p>
+                <figure class="guide-figure"><img class="guide-image" loading="lazy" src="https://drive.google.com/thumbnail?id=1EHEehqBn9Fxbi8We5vAjp8LMvOSiIJnA&amp;sz=w1200" alt="Picture6: Hồ sơ học sinh kèm ảnh đại diện"><figcaption class="guide-caption">Picture6 — Hồ sơ học sinh kèm ảnh đại diện</figcaption></figure>
+              </div>
+            </section>
+          </div>
+        </section>
+      </div>
+    </div>
+    <div id="pageStats" class="app-page blank-page" aria-hidden="true"></div>
+    <div id="pageScores" class="app-page blank-page" aria-hidden="true"></div>
+    <div id="pageTraining" class="app-page blank-page" aria-hidden="true"></div>
+
+    <div class="bottomnav" id="bottomNav">
+      <div class="navitem" data-page="pageSettings">
+        <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Cài đặt
+      </div>
+      <div class="navitem active" data-page="pageAttendance">
+        <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
+        Điểm danh
+        <span class="ring"></span>
+      </div>
+      <div class="navitem" data-page="pageStats">
+        <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+        Thống kê
+      </div>
+      <div class="navitem" data-page="pageScores">
+        <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
+        Điểm
+      </div>
+      <div class="navitem" data-page="pageTraining">
+        <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+        Rèn luyện
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<!-- SECTION: 07 | CÁC HỘP THOẠI: LIÊN HỆ / ẢNH / DANH SÁCH / GHI CHÚ -->
+<div class="message-sheet-overlay" id="messageChoiceOverlay">
+  <div class="message-sheet" role="dialog" aria-modal="true" aria-labelledby="messageChoiceTitle">
+    <div class="message-sheet-title" id="messageChoiceTitle">Chọn cách nhắn tin</div>
+    <button type="button" class="message-choice zalo-choice" id="messageByZalo">Nhắn qua Zalo</button>
+    <button type="button" class="message-choice" id="messageBySms">Nhắn bằng SMS</button>
+    <button type="button" class="message-choice cancel-choice" id="cancelMessageChoice">Hủy</button>
+  </div>
+</div>
+
+<div class="message-sheet-overlay" id="avatarDeleteOverlay">
+  <div class="message-sheet" role="dialog" aria-modal="true" aria-labelledby="avatarDeleteTitle">
+    <div class="message-sheet-title" id="avatarDeleteTitle">Xóa ảnh đại diện?</div>
+    <div class="avatar-delete-copy" id="avatarDeleteCopy">Ảnh trên Drive và LinkAnh trong Google Sheets sẽ bị xóa.</div>
+    <button type="button" class="message-choice delete-choice" id="confirmAvatarDelete">Có, xóa ảnh</button>
+    <button type="button" class="message-choice cancel-choice" id="cancelAvatarDelete">Không</button>
+  </div>
+</div>
+
+<div class="photo-viewer-overlay" id="studentPhotoViewer" aria-hidden="true">
+  <div class="photo-viewer-dialog" role="dialog" aria-modal="true" aria-labelledby="studentPhotoViewerName">
+    <button type="button" class="photo-viewer-close" id="closeStudentPhotoViewer" aria-label="Đóng ảnh">×</button>
+    <img class="photo-viewer-image" id="studentPhotoLarge" alt="Ảnh đại diện học sinh">
+    <div class="photo-viewer-name" id="studentPhotoViewerName"></div>
+  </div>
+</div>
+
+<div class="message-sheet-overlay" id="studentJumpOverlay" aria-hidden="true">
+  <div class="message-sheet student-jump-sheet" role="dialog" aria-modal="true" aria-labelledby="studentJumpTitle">
+    <div class="student-jump-top">
+      <div class="message-sheet-title" id="studentJumpTitle">Danh sách học sinh</div>
+      <button type="button" class="student-jump-close" id="closeStudentJumpList" aria-label="Đóng danh sách">×</button>
+    </div>
+    <input type="search" class="student-jump-search" id="studentJumpSearch" placeholder="Tìm theo tên hoặc MSSV" autocomplete="off">
+    <div class="student-jump-list" id="studentJumpList"></div>
+  </div>
+</div>
+
+<div class="message-sheet-overlay" id="classPickerOverlay" aria-hidden="true">
+  <div class="message-sheet class-picker-sheet" role="dialog" aria-modal="true" aria-labelledby="classPickerTitle">
+    <div class="class-picker-top">
+      <div class="message-sheet-title" id="classPickerTitle">Chọn lớp</div>
+      <button type="button" class="class-picker-close" id="closeClassPicker" aria-label="Đóng danh sách lớp">×</button>
+    </div>
+    <div class="class-picker-list" id="classPickerList"></div>
+  </div>
+</div>
+
+<div class="message-sheet-overlay" id="studentNoteOverlay" aria-hidden="true">
+  <div class="message-sheet student-note-sheet" role="dialog" aria-modal="true" aria-labelledby="studentNoteTitle">
+    <div class="message-sheet-title" id="studentNoteTitle">Ghi chú học sinh</div>
+    <textarea class="student-note-textarea" id="studentNoteInput" maxlength="1000" placeholder="Nhập ghi chú..." autocomplete="off"></textarea>
+    <div class="student-note-status" id="studentNoteStatus"></div>
+    <div class="student-note-actions">
+      <button type="button" class="message-choice cancel-choice" id="cancelStudentNote">Hủy</button>
+      <button type="button" class="message-choice delete-choice" id="deleteStudentNote">Xóa</button>
+      <button type="button" class="message-choice save-choice" id="saveStudentNoteButton">Lưu</button>
+    </div>
+  </div>
+</div>
+
+<div class="message-sheet-overlay" id="studentNoteDeleteOverlay" aria-hidden="true">
+  <div class="message-sheet" role="dialog" aria-modal="true" aria-labelledby="studentNoteDeleteTitle">
+    <div class="message-sheet-title" id="studentNoteDeleteTitle">Xóa ghi chú?</div>
+    <div class="avatar-delete-copy" id="studentNoteDeleteCopy">Toàn bộ nội dung ghi chú sẽ bị xóa.</div>
+    <button type="button" class="message-choice delete-choice" id="confirmStudentNoteDelete">Có, xóa</button>
+    <button type="button" class="message-choice cancel-choice" id="cancelStudentNoteDelete">Không</button>
+  </div>
+</div>
+
+<?!= include_('Java'); ?>
+
+
+
+
+
+
+</body>
+</html>
