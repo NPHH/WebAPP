@@ -1,0 +1,4069 @@
+<!--
+===============================================================================
+WEBAPP ĐIỂM DANH HỌC SINH - GIAO DIỆN INDEX.HTML
+===============================================================================
+HƯỚNG DẪN NHANH KHI MỞ LẠI SAU MỘT NĂM
+
+1. File này có ba phần: HTML (nội dung), CSS trong <style> (hình thức),
+   JavaScript trong <script> (tải dữ liệu và xử lý thao tác).
+
+2. Những chỗ thường cần chỉnh:
+   - Tên ứng dụng: tìm "Điểm danh học sinh".
+   - Màu giao diện: chỉnh các biến màu trong :root ở đầu CSS.
+   - Chữ trên nút: tìm "Có mặt", "Vắng", "Có phép".
+   - Số giờ mỗi buổi: hiện đang nhân 4 trong hàm loadAbsenceStats().
+
+3. Danh sách lớp, giáo viên, môn học và học sinh được lấy từ Code.gs và Sheet,
+   không viết cố định trong file này.
+
+4. Không đổi các id như classSelect, teacherSelect, subjectSelect,
+   attendanceDate, studentName... nếu chưa sửa đồng thời JavaScript.
+
+5. Không đổi tên các hàm phía Code.gs: getAppConfig, getClassData,
+   getAvatarClassData, getStudentProfilePhotoData, getStudentProfilePhotosData,
+   saveStudentNote, saveAttendance và getAbsenceStats.
+
+6. Sau khi sửa: Lưu và triển khai WebApp bằng một phiên bản mới.
+===============================================================================
+-->
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<base target="_top">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Điểm danh học sinh</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/dist/face-api.js"></script>
+<style>
+  /* BẢNG MÀU CHUNG: nên đổi màu tại đây thay vì sửa từng vị trí bên dưới. */
+  :root{
+    --ink:#122238;
+    --ink-soft:#5b6b82;
+    --paper:#eef2f6;
+    --card:#ffffff;
+    --line:#dfe6ee;
+    --navy:#1c3a5e;
+    --navy-deep:#0f2743;
+    --teal:#1f9d8b;
+    --teal-soft:#e4f5f1;
+    --amber:#e3922b;
+    --amber-soft:#fbf0df;
+    --coral:#d85c4a;
+    --coral-soft:#fbe8e4;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Be Vietnam Pro', sans-serif;
+    background:
+      radial-gradient(circle at 15% 8%, #e9eff5 0%, transparent 45%),
+      var(--paper);
+    min-height:100vh;
+    display:flex;
+    align-items:flex-start;
+    justify-content:center;
+    padding:36px 16px;
+  }
+
+  .device{
+    width:390px;
+    max-width:100%;
+    background:var(--card);
+    border-radius:34px;
+    box-shadow:0 24px 60px -18px rgba(15,39,67,0.35), 0 2px 8px rgba(15,39,67,0.08);
+    overflow:hidden;
+    border:8px solid var(--navy-deep);
+    position:relative;
+  }
+  .notch{
+    position:absolute;
+    top:8px; left:50%; transform:translateX(-50%);
+    width:120px; height:20px;
+    background:var(--navy-deep);
+    border-radius:0 0 14px 14px;
+    z-index:20;
+  }
+
+  /* status bar */
+  .statusbar{
+    background:var(--navy-deep);
+    color:#cdd9e5;
+    font-family:'Space Grotesk',sans-serif;
+    font-size:12px;
+    font-weight:600;
+    padding:14px 22px 6px;
+    display:flex;
+    justify-content:space-between;
+    letter-spacing:.02em;
+  }
+
+  /* top header + filter selects */
+  .tabbar{
+    background:var(--paper);
+    padding:calc(max(14px, env(safe-area-inset-top)) + 63px) 0 0;
+  }
+  .tabbar-top{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    padding:max(14px, env(safe-area-inset-top)) 14px 13px;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0) 40%),
+      var(--navy-deep);
+    box-shadow:0 6px 16px -10px rgba(5,15,28,0.35);
+    position:fixed;
+    top:0;
+    left:0;
+    right:0;
+    z-index:50;
+  }
+  .tabbar-title{
+    font-family:'Space Grotesk',sans-serif;
+    font-size:13px;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color:#eef4fb;
+    font-weight:700;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .tabbar-title::before{
+    content:"";
+    width:7px;height:7px;
+    border-radius:50%;
+    background:var(--teal);
+    box-shadow:0 0 0 4px rgba(31,157,139,0.22);
+    flex:0 0 auto;
+  }
+  .camera-icon-btn{
+    flex:0 0 auto;
+    width:34px;height:34px;
+    border-radius:10px;
+    background:var(--navy);
+    border:1px solid rgba(255,255,255,0.12);
+    display:flex;align-items:center;justify-content:center;
+    position:relative;
+  }
+  .camera-icon-btn svg{width:17px;height:17px;stroke:#fff;}
+  .camera-icon-btn .live-dot{
+    position:absolute;
+    top:-3px;right:-3px;
+    width:9px;height:9px;
+    border-radius:50%;
+    background:var(--coral);
+    border:2px solid var(--navy-deep);
+  }
+
+  .filter-stack{
+    display:flex;
+    flex-direction:column;
+    gap:9px;
+    padding:0 16px 12px;
+  }
+  .select-wrap{
+    position:relative;
+    display:flex;
+    align-items:center;
+    border-radius:13px;
+    transition:transform .12s ease;
+  }
+  .select-wrap:focus-within{transform:translateY(-1px);}
+  .select-icon{
+    position:absolute;
+    left:12px;
+    width:15px;height:15px;
+    stroke:var(--navy);
+    pointer-events:none;
+  }
+  .filter-select{
+    -webkit-appearance:none;
+    appearance:none;
+    width:100%;
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:13px;
+    padding:11px 32px 11px 36px;
+    font-family:'Be Vietnam Pro', sans-serif;
+    font-size:13px;
+    font-weight:600;
+    color:var(--ink);
+    box-shadow:0 6px 14px -10px rgba(15,39,67,0.18);
+    transition:border-color .15s ease, box-shadow .15s ease;
+  }
+  .filter-select:focus{
+    outline:none;
+    border-color:#9fb0c2;
+    box-shadow:0 0 0 3px rgba(15,39,67,0.1);
+  }
+  .select-chevron{
+    position:absolute;
+    right:12px;
+    width:13px;height:13px;
+    stroke:var(--navy);
+    pointer-events:none;
+  }
+
+  /* Danh sách chọn riêng: áp dụng ngay, không dùng Next/H.tất của điện thoại. */
+  .class-native-select{
+    position:absolute !important;
+    width:1px !important;height:1px !important;
+    opacity:0 !important;pointer-events:none !important;
+    overflow:hidden !important;
+  }
+  .class-picker-trigger{
+    display:block;text-align:left;cursor:pointer;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .class-picker-trigger:disabled{opacity:.58;cursor:default;}
+  .select-wrap .class-picker-trigger{padding-right:32px;}
+  #classPickerOverlay{
+    align-items:center;
+    padding:12px 16px max(16px, env(safe-area-inset-bottom));
+    padding-top:max(16px, env(safe-area-inset-top));
+  }
+  .class-picker-sheet{
+    width:min(100%,520px);
+    height:min(88vh,720px);
+    height:min(88dvh,720px);
+    max-height:calc(100vh - 28px);
+    max-height:calc(100dvh - 28px);
+    display:flex;flex-direction:column;gap:10px;
+  }
+  .class-picker-top{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .class-picker-top .message-sheet-title{margin:0;text-align:left;}
+  .class-picker-close{
+    flex:0 0 auto;width:38px;height:38px;border:0;border-radius:50%;
+    background:#e8eef5;color:var(--navy);font-size:25px;line-height:1;
+  }
+  .class-picker-list{flex:1;min-height:0;display:flex;flex-direction:column;gap:8px;overflow:auto;padding:2px 2px 8px;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}
+  .class-picker-option{
+    width:100%;min-height:46px;border:1px solid var(--line);border-radius:13px;padding:10px 14px;
+    background:var(--paper);color:var(--ink);text-align:center;
+    font:700 13px 'Be Vietnam Pro',sans-serif;
+    line-height:1.35;white-space:normal;overflow-wrap:anywhere;
+  }
+  .class-picker-option.current{background:var(--teal-soft);border-color:var(--teal);color:#0c6b5c;}
+  .class-picker-list[data-picker-for="teacherSelect"] .class-picker-option,
+  .class-picker-list[data-picker-for="subjectSelect"] .class-picker-option{text-align:left;}
+  .class-picker-empty{padding:18px;text-align:center;color:var(--ink-soft);font-size:12px;}
+
+  .screen{
+    background:var(--paper);
+    padding:16px 16px calc(70px + max(16px, env(safe-area-inset-bottom)));
+  }
+
+  /* eyebrow */
+  .eyebrow{
+    font-family:'Space Grotesk',sans-serif;
+    font-size:11px;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    font-weight:600;
+    margin:0 2px 8px;
+  }
+
+  /* student card */
+  .student-card{
+    background:var(--card);
+    border-radius:20px;
+    border:1px solid var(--line);
+    padding:16px;
+    display:flex;
+    gap:14px;
+    align-items:center;
+    box-shadow:0 10px 24px -16px rgba(15,39,67,0.25);
+    position:relative;
+  }
+  .student-meta{min-width:0;}
+  .quick-student-list-btn{
+    position:absolute;right:13px;bottom:13px;display:flex;align-items:center;gap:5px;
+    border:1px solid #cbd8e5;border-radius:10px;padding:7px 8px;background:#f3f7fb;
+    color:var(--navy);font:700 9.5px 'Be Vietnam Pro',sans-serif;white-space:nowrap;
+  }
+  .quick-student-list-btn svg{width:13px;height:13px;stroke:currentColor;}
+  .quick-student-list-btn:disabled{opacity:.38;pointer-events:none;}
+  .avatar{
+    width:84px;height:84px;border-radius:18px;
+    background:linear-gradient(150deg,#2c4d76,#173350);
+    flex:0 0 auto;
+    display:flex;align-items:center;justify-content:center;
+    position:relative;
+    overflow:hidden;
+    color:#cfe0f0;
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:700;
+    font-size:22px;
+  }
+  .avatar img{
+    position:absolute;
+    inset:0;
+    width:100%;height:100%;
+    object-fit:cover;
+    object-position:center;
+    display:none;
+  }
+  .avatar.has-photo img{display:block;}
+  .avatar.has-photo .avatar-initials{visibility:hidden;}
+  .avatar.has-photo{cursor:zoom-in;box-shadow:0 0 0 2px rgba(31,157,139,.18);}
+  .avatar:focus-visible{outline:3px solid rgba(31,157,139,.35);outline-offset:3px;}
+
+  .photo-viewer-overlay{
+    position:fixed;inset:0;z-index:1200;display:none;align-items:center;justify-content:center;
+    padding:18px;background:rgba(5,14,25,.92);
+  }
+  .photo-viewer-overlay.show{display:flex;}
+  .photo-viewer-dialog{
+    width:min(100%,720px);max-height:calc(100vh - 36px);display:flex;flex-direction:column;
+    align-items:center;justify-content:center;position:relative;
+  }
+  .photo-viewer-image{
+    display:block;max-width:100%;max-height:calc(100vh - 115px);border-radius:16px;
+    object-fit:contain;background:#0f1d2c;box-shadow:0 18px 55px rgba(0,0,0,.45);
+    touch-action:pinch-zoom;
+  }
+  .photo-viewer-name{margin-top:13px;color:#fff;font-size:16px;font-weight:800;text-align:center;}
+  .photo-viewer-close{
+    position:fixed;top:max(14px,env(safe-area-inset-top));right:14px;width:42px;height:42px;
+    border:1px solid rgba(255,255,255,.3);border-radius:50%;background:rgba(15,39,67,.78);
+    color:#fff;font-size:28px;line-height:1;display:flex;align-items:center;justify-content:center;
+  }
+  body.photo-viewer-open{overflow:hidden;}
+  #studentJumpOverlay{
+    align-items:flex-start;
+    padding:max(10px,env(safe-area-inset-top)) 10px max(10px,env(safe-area-inset-bottom));
+  }
+  .student-jump-sheet{
+    height:calc(100vh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    height:calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    max-height:none;display:flex;flex-direction:column;
+  }
+  .student-jump-top{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+  .student-jump-top .message-sheet-title{margin:0;text-align:left;}
+  .student-jump-close{
+    width:34px;height:34px;border:0;border-radius:50%;background:#e8eef5;color:var(--navy);
+    font-size:22px;line-height:1;display:flex;align-items:center;justify-content:center;
+  }
+  .student-jump-search{
+    width:100%;margin:12px 0 10px;border:1px solid var(--line);border-radius:12px;
+    padding:11px 12px;background:#f7f9fb;color:var(--ink);
+    /* iPhone/Safari tự phóng to trang nếu ô nhập có chữ nhỏ hơn 16px. */
+    font:600 16px 'Be Vietnam Pro',sans-serif;
+  }
+  .student-jump-search:focus{outline:none;border-color:#9fb0c2;box-shadow:0 0 0 3px rgba(15,39,67,.09);}
+  .student-jump-list{
+    flex:1;display:flex;flex-direction:column;gap:7px;overflow:auto;min-height:0;
+    padding-bottom:8px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+  }
+  .student-jump-row{
+    width:100%;display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:9px;
+    align-items:center;border:1px solid var(--line);border-radius:12px;padding:10px;
+    background:#f7f9fb;text-align:left;color:var(--ink);
+  }
+  .student-jump-row.current{border-color:var(--teal);background:var(--teal-soft);}
+  .student-jump-stt{font:700 11px 'Space Grotesk',sans-serif;color:var(--navy);}
+  .student-jump-name{font-size:12px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .student-jump-status{width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font:800 15px/1 'Space Grotesk',sans-serif;color:var(--ink-soft);background:#e8eef5;}
+  .student-jump-status.present{background:#dff4ec;color:#087a54;}
+  .student-jump-status.absent{background:#fde7e4;color:#bc3d32;}
+  .student-jump-status.excused{background:#fff0d6;color:#b66c0c;font-size:13px;}
+  .student-jump-status.unknown{font-size:16px;}
+  .student-jump-empty{padding:24px 10px;text-align:center;color:var(--ink-soft);font-size:12px;}
+  .student-meta h2{
+    margin:0 0 2px;
+    font-size:17px;
+    font-weight:700;
+    color:var(--ink);
+  }
+  .student-meta p{
+    margin:0;
+    font-size:12.5px;
+    color:var(--ink-soft);
+    font-weight:500;
+  }
+  .student-meta .id-pill{
+    display:inline-block;
+    margin-top:6px;
+    font-size:10.5px;
+    font-weight:700;
+    letter-spacing:.03em;
+    color:var(--navy);
+    background:#e3ebf3;
+    padding:3px 9px;
+    border-radius:999px;
+  }
+
+  /* attendance status buttons */
+  .status-row{
+    display:grid;
+    grid-template-columns:1fr 1fr 1fr;
+    gap:8px;
+    margin-top:14px;
+  }
+  .status-btn{
+    border-radius:14px;
+    padding:12px 6px 10px;
+    text-align:center;
+    font-weight:700;
+    font-size:12.5px;
+    border:1.5px solid transparent;
+    position:relative;
+  }
+  .status-btn .dot{
+    width:7px;height:7px;border-radius:50%;
+    display:inline-block;margin-right:5px;
+  }
+  .status-btn.present{
+    background:var(--teal-soft);
+    color:#0c6b5c;
+    border-color:#bfe6dd;
+  }
+  .status-btn.present .dot{background:var(--teal);}
+  .status-btn.absent{
+    background:var(--coral-soft);
+    color:#a13f2f;
+    border-color:#f2c8bf;
+  }
+  .status-btn.absent .dot{background:var(--coral);}
+  .status-btn.excused{
+    background:var(--amber-soft);
+    color:#93630f;
+    border-color:#f0d9ab;
+  }
+  .status-btn.excused .dot{background:var(--amber);}
+  .status-btn.selected{
+    box-shadow:0 6px 14px -6px rgba(15,39,67,0.3);
+    transform:translateY(-1px);
+  }
+  .status-btn.selected::after{
+    content:"✓ đã chọn";
+    display:block;
+    font-size:9px;
+    font-weight:600;
+    letter-spacing:.03em;
+    opacity:.75;
+    margin-top:2px;
+  }
+
+  /* contact groups (Học sinh / Cha / Mẹ) */
+  .contact-groups{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    margin-top:14px;
+  }
+  .contact-group{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:16px;
+    padding:12px;
+    box-shadow:0 8px 18px -14px rgba(15,39,67,0.2);
+  }
+  .contact-group-head{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-bottom:10px;
+    padding:0 2px;
+  }
+  .contact-group-head .avatar-sm{
+    width:24px;height:24px;border-radius:8px;
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Space Grotesk',sans-serif;
+    font-size:10px;font-weight:700;color:#fff;
+    flex:0 0 auto;
+  }
+  .contact-group.student .avatar-sm{background:linear-gradient(150deg,#2c4d76,#173350);}
+  .contact-group.father .avatar-sm{background:linear-gradient(150deg,#1f9d8b,#0c6b5c);}
+  .contact-group.mother .avatar-sm{background:linear-gradient(150deg,#d8879a,#a1436a);}
+  .contact-group-head .who{
+    font-size:12.5px;
+    font-weight:700;
+    color:var(--ink);
+  }
+  .contact-group-head .who span{
+    display:block;
+    font-size:10.5px;
+    font-weight:500;
+    color:var(--ink-soft);
+    margin-top:1px;
+  }
+  .contact-row{
+    display:grid;
+    grid-template-columns:1fr 1fr 1fr;
+    gap:8px;
+  }
+  .contact-btn{
+    background:var(--paper);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:9px 6px;
+    text-align:center;
+    font-size:11.5px;
+    font-weight:600;
+    color:var(--navy);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:4px;
+  }
+  .contact-btn svg{width:16px;height:16px;stroke:var(--navy);}
+  .contact-btn.zalo svg{stroke:#1a7fd1;}
+  .contact-btn.zalo{color:#1a7fd1;}
+
+  /* stats card */
+  .section{
+    background:var(--card);
+    border-radius:18px;
+    border:1px solid var(--line);
+    margin-top:16px;
+    overflow:hidden;
+  }
+  .section-head{
+    padding:12px 16px;
+    font-size:13px;
+    font-weight:700;
+    color:var(--ink);
+    border-bottom:1px solid var(--line);
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+  }
+  .section-head .cap{
+    font-size:10px;
+    color:var(--ink-soft);
+    font-weight:600;
+    background:#eef2f6;
+    padding:3px 8px;
+    border-radius:999px;
+  }
+  .stats-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+  }
+  .stat{
+    padding:14px 16px;
+    text-align:center;
+  }
+  .stat:first-child{border-right:1px solid var(--line);}
+  .stat .num{
+    font-family:'Space Grotesk',sans-serif;
+    font-size:24px;
+    font-weight:700;
+    color:var(--navy);
+    line-height:1;
+  }
+  .stat.excused .num{color:#93630f;}
+  .stat.absent .num{color:#a13f2f;}
+  .stat .lbl{
+    margin-top:5px;
+    font-size:10.5px;
+    color:var(--ink-soft);
+    font-weight:600;
+    line-height:1.3;
+  }
+
+  /* camera attendance CTA */
+  .camera-cta{
+    margin-top:16px;
+    background:linear-gradient(135deg,var(--navy),var(--navy-deep));
+    border-radius:18px;
+    padding:14px 16px;
+    display:flex;
+    align-items:center;
+    gap:12px;
+    color:#fff;
+  }
+  .camera-cta .icon-wrap{
+    width:38px;height:38px;border-radius:11px;
+    background:rgba(255,255,255,0.14);
+    display:flex;align-items:center;justify-content:center;
+    flex:0 0 auto;
+  }
+  .camera-cta .icon-wrap svg{width:19px;height:19px;stroke:#fff;}
+  .camera-cta .txt{flex:1;}
+  .camera-cta .txt .t1{font-size:13px;font-weight:700;}
+  .camera-cta .txt .t2{font-size:10.5px;color:#c3d3e3;font-weight:500;margin-top:1px;}
+  .camera-cta .arrow{color:#c3d3e3;font-size:16px;}
+
+  /* profile info */
+  .profile-body{padding:14px 16px 16px;}
+  .info-row{
+    display:flex;
+    justify-content:space-between;
+    padding:8px 0;
+    border-bottom:1px dashed var(--line);
+    font-size:12.5px;
+  }
+  .info-row:last-child{border-bottom:none;}
+  .info-row .k{color:var(--ink-soft);font-weight:500;}
+  .info-row .v{color:var(--ink);font-weight:600;text-align:right;max-width:68%;overflow-wrap:anywhere;}
+  .profile-note-row{align-items:flex-start;gap:10px;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+  .profile-note-row:active{opacity:.68;}
+  .profile-note-row .v{
+    flex:1;max-width:none;white-space:pre-wrap;min-height:18px;
+    text-align:justify;text-align-last:left;text-justify:inter-word;
+  }
+  .profile-note-edit{
+    flex:0 0 auto;width:18px;height:18px;margin-top:1px;stroke:var(--teal);stroke-width:2;
+  }
+  .profile-note-row:focus-visible{outline:3px solid rgba(31,157,139,.22);outline-offset:3px;border-radius:8px;}
+
+
+  /* =====================================================
+     APP PAGES / BOTTOM NAVIGATION
+     Chỉ trang Điểm danh đang hoạt động.
+     4 trang còn lại để trống để bổ sung sau.
+     ===================================================== */
+  .app-page{
+    display:none;
+    min-height:100dvh;
+  }
+
+  .app-page.active-page{
+    display:block;
+  }
+
+  .app-page.blank-page{
+    min-height:100dvh;
+    background:var(--card);
+  }
+
+  .navitem{
+    cursor:pointer;
+    user-select:none;
+    -webkit-tap-highlight-color:transparent;
+  }
+
+  .navitem:active{
+    opacity:.72;
+  }
+
+  /* bottom nav */
+  .bottomnav{
+    display:flex;
+    background:var(--card);
+    border-top:1px solid var(--line);
+    padding:10px 6px max(16px, env(safe-area-inset-bottom));
+    position:fixed;
+    left:0;
+    right:0;
+    bottom:0;
+    z-index:50;
+    box-shadow:0 -6px 16px -10px rgba(5,15,28,0.25);
+  }
+  .navitem{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:4px;
+    font-size:10px;
+    font-weight:600;
+    color:var(--ink-soft);
+  }
+  .navitem svg{width:20px;height:20px;stroke:var(--ink-soft);}
+  .navitem.active{color:var(--navy);}
+  .navitem.active svg{stroke:var(--navy);}
+  .navitem.active .ring{
+    width:4px;height:4px;border-radius:50%;background:var(--teal);
+  }
+
+  /* session toggle: Sang / Chieu */
+  .session-toggle{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+    margin:0 2px 14px;
+  }
+  .session-btn{
+    background:var(--card);
+    border:1.5px solid var(--line);
+    border-radius:12px;
+    padding:10px 6px;
+    text-align:center;
+    font-size:12.5px;
+    font-weight:700;
+    color:var(--ink-soft);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+  }
+  .session-btn svg{width:15px;height:15px;stroke:var(--ink-soft);}
+  .session-btn.active{
+    background:var(--navy);
+    color:#fff;
+    border-color:var(--navy);
+    box-shadow:0 6px 14px -6px rgba(15,39,67,0.35);
+  }
+  .session-btn.active svg{stroke:#fff;}
+  .session-btn .done-pill{
+    font-size:9px;
+    font-weight:600;
+    background:rgba(255,255,255,0.18);
+    padding:1px 7px;
+    border-radius:999px;
+    margin-left:2px;
+  }
+  .session-btn:not(.active) .done-pill{
+    background:var(--teal-soft);
+    color:#0c6b5c;
+  }
+  .session-hint{
+    text-align:center;
+    font-size:10px;
+    color:var(--ink-soft);
+    font-weight:500;
+    margin:-6px 2px 14px;
+    line-height:1.4;
+  }
+
+  /* attendance date picker */
+  .date-picker-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:10px 12px;
+    margin:0 2px 12px;
+    box-shadow:0 8px 18px -14px rgba(15,39,67,0.2);
+  }
+  .date-info{
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+  }
+  .date-badge{
+    font-size:9.5px;
+    font-weight:700;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    color:#0c6b5c;
+    background:var(--teal-soft);
+    padding:2px 8px;
+    border-radius:999px;
+    width:fit-content;
+  }
+  .date-badge.makeup{
+    color:#93630f;
+    background:var(--amber-soft);
+  }
+  .date-value{
+    font-size:13.5px;
+    font-weight:700;
+    color:var(--ink);
+  }
+  .date-input-wrap{
+    position:relative;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    width:36px;height:36px;
+    border-radius:10px;
+    background:var(--paper);
+    border:1px solid var(--line);
+    flex:0 0 auto;
+  }
+  .date-input-wrap svg{
+    width:16px;height:16px;
+    stroke:var(--navy);
+    pointer-events:none;
+  }
+  .date-input{
+    position:absolute;
+    inset:0;
+    width:100%;height:100%;
+    opacity:0;
+    border:0;
+    cursor:pointer;
+  }
+
+  .caption{
+    text-align:center;
+    font-family:'Space Grotesk',sans-serif;
+    font-size:12px;
+    color:var(--ink-soft);
+    margin-top:16px;
+    letter-spacing:.02em;
+  }
+
+  /* =====================================================
+     FULLSCREEN WEB APP
+     Bỏ hoàn toàn khung giả điện thoại và nền bên ngoài
+     ===================================================== */
+  html,
+  body{
+    margin:0 !important;
+    padding:0 !important;
+    width:100% !important;
+    min-width:100% !important;
+    min-height:100vh !important;
+    min-height:100dvh !important;
+    background:var(--paper) !important;
+    display:block !important;
+    overflow-x:hidden !important;
+  }
+
+  body > div{
+    width:100% !important;
+    max-width:none !important;
+    margin:0 !important;
+    padding:0 !important;
+  }
+
+  .device{
+    width:100% !important;
+    max-width:none !important;
+    min-height:100vh !important;
+    min-height:100dvh !important;
+    margin:0 !important;
+    padding:0 !important;
+    border:0 !important;
+    border-radius:0 !important;
+    box-shadow:none !important;
+    background:var(--paper) !important;
+    overflow:visible !important;
+    position:relative !important;
+  }
+
+  .notch{
+    display:none !important;
+  }
+
+  .caption{
+    display:none !important;
+  }
+
+  .tabbar{
+    margin:0 !important;
+    border-radius:0 !important;
+  }
+
+  .tabbar-top{
+    padding-top:max(14px, env(safe-area-inset-top)) !important;
+    position:fixed !important;
+    top:0 !important;
+    left:0 !important;
+    right:0 !important;
+    z-index:50 !important;
+  }
+
+  @media (max-width: 767px){
+    .screen{
+      padding-left:16px !important;
+      padding-right:16px !important;
+    }
+  }
+
+  @media (min-width: 768px){
+    .tabbar-top{
+      padding:18px 24px 16px !important;
+    }
+
+    .tabbar{
+      padding-top:68px !important;
+    }
+
+    .filter-stack{
+      padding:0 24px 18px !important;
+      display:grid !important;
+      grid-template-columns:1fr 1fr 1fr !important;
+      gap:12px !important;
+    }
+
+    .screen{
+      padding:20px 24px calc(78px + max(16px, env(safe-area-inset-bottom))) !important;
+    }
+  }
+
+
+  /* Vuốt ngang để chuyển học sinh; vẫn cho phép cuộn dọc bình thường */
+  .screen{
+    touch-action:pan-y;
+  }
+
+  .student-card{
+    transition:transform .18s ease, opacity .18s ease;
+    will-change:transform, opacity;
+  }
+
+  .student-card.swipe-out-left{
+    transform:translateX(-35px);
+    opacity:.25;
+  }
+
+  .student-card.swipe-out-right{
+    transform:translateX(35px);
+    opacity:.25;
+  }
+
+  .student-card.swipe-in{
+    transform:translateX(0);
+    opacity:1;
+  }
+
+  .message-sheet-overlay{
+    position:fixed;
+    inset:0;
+    z-index:1000;
+    display:none;
+    align-items:flex-end;
+    justify-content:center;
+    padding:16px 16px max(16px, env(safe-area-inset-bottom));
+    background:rgba(15,39,67,.42);
+  }
+  .message-sheet-overlay.show{display:flex;}
+  .message-sheet{
+    width:min(100%,420px);
+    background:var(--card);
+    border-radius:20px;
+    padding:16px;
+    box-shadow:0 20px 50px rgba(15,39,67,.28);
+  }
+  .message-sheet-title{
+    text-align:center;
+    font-size:14px;
+    font-weight:700;
+    color:var(--ink);
+    margin-bottom:12px;
+  }
+  .message-choice{
+    width:100%;
+    border:1px solid var(--line);
+    border-radius:13px;
+    padding:13px;
+    margin-top:8px;
+    background:var(--paper);
+    color:var(--navy);
+    font:600 13px 'Be Vietnam Pro',sans-serif;
+  }
+  .message-choice.zalo-choice{color:#087bd3;}
+  .message-choice.cancel-choice{background:transparent;color:var(--ink-soft);}
+  .message-choice.delete-choice{background:var(--coral);border-color:var(--coral);color:#fff;font-weight:800;}
+  .message-choice.save-choice{background:var(--teal);border-color:var(--teal);color:#fff;font-weight:800;}
+  .message-choice:disabled{opacity:.5;pointer-events:none;}
+  .avatar-delete-copy{
+    margin:-2px 4px 10px;text-align:center;font-size:12.5px;line-height:1.55;color:var(--ink-soft);
+  }
+  #studentNoteOverlay{
+    align-items:flex-start;overflow:hidden;box-sizing:border-box;
+    padding:10px 10px max(10px,env(safe-area-inset-bottom));
+  }
+  #studentNoteDeleteOverlay{z-index:1030;}
+  .student-note-sheet{
+    width:min(100%,520px);
+    height:calc(100vh - 20px);height:calc(100dvh - 20px);max-height:none;min-height:0;
+    padding:12px;
+    box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden;
+  }
+  .student-note-sheet > .message-sheet-title{
+    flex:0 0 auto;margin:0 0 10px;text-align:left;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .student-note-textarea{
+    width:100%;flex:1;min-height:0;max-height:none;resize:none;overflow:auto;
+    text-align:justify;text-align-last:left;text-justify:inter-word;
+    border:1px solid var(--line);border-radius:13px;padding:12px;
+    background:#f7f9fb;color:var(--ink);line-height:1.5;
+    font:500 16px 'Be Vietnam Pro',sans-serif;
+    -webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+  }
+  .student-note-textarea:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(31,157,139,.12);}
+  .student-note-status{min-height:16px;margin:5px 2px 0;color:var(--ink-soft);font-size:11px;line-height:1.35;}
+  .student-note-status.error{color:#a13f2f;}
+  .student-note-actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+  .student-note-actions .message-choice{margin-top:0;padding:10px 8px;}
+  body.student-note-open{overflow:hidden;}
+  @supports (-webkit-touch-callout:none){
+    #studentNoteOverlay{padding-top:max(48px,env(safe-area-inset-top));}
+    .student-note-sheet{height:calc(100vh - 58px);height:calc(100dvh - 58px);}
+  }
+  @media (max-width:700px){
+    .student-note-sheet.keyboard-active{
+      height:48vh;height:48dvh;min-height:230px;
+    }
+  }
+
+
+  .subject-profile-body{
+    margin-top:0;
+  }
+  .subject-profile-body .info-row{
+    min-height:34px;
+  }
+
+  .settings-page{
+    min-height:100%;
+    padding:18px 16px 96px;
+    background:var(--bg);
+  }
+  .settings-header{
+    margin-bottom:16px;
+  }
+  .settings-header h2{
+    margin:0 0 4px;
+    color:var(--navy);
+    font:700 23px 'Space Grotesk',sans-serif;
+  }
+  .settings-header p{
+    margin:0;
+    color:var(--ink-soft);
+    font-size:12px;
+    line-height:1.55;
+  }
+  .settings-menu{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .settings-item{
+    width:100%;
+    display:flex;
+    align-items:center;
+    gap:12px;
+    padding:14px;
+    border:1px solid var(--line);
+    border-radius:16px;
+    background:var(--paper);
+    color:var(--ink);
+    text-align:left;
+    box-shadow:0 4px 14px rgba(25,55,85,.05);
+    font:inherit;
+  }
+  .settings-item:active{transform:scale(.985);}
+  .settings-item-icon{
+    width:40px;height:40px;
+    flex:0 0 40px;
+    border-radius:13px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:#edf4fb;
+    color:var(--navy);
+  }
+  .settings-item-icon svg{width:21px;height:21px;stroke:currentColor;}
+  .settings-item-copy{min-width:0;flex:1;}
+  .settings-item-title{
+    display:block;
+    margin-bottom:3px;
+    color:var(--navy);
+    font-size:14px;
+    font-weight:700;
+  }
+  .settings-item-note{
+    display:block;
+    color:var(--ink-soft);
+    font-size:11px;
+    line-height:1.4;
+  }
+  .settings-chevron{
+    width:18px;height:18px;
+    flex:0 0 18px;
+    stroke:#9aa9ba;
+  }
+  .settings-item.future{
+    border-style:dashed;
+    box-shadow:none;
+  }
+  .settings-item.future .settings-item-icon{
+    background:#f2f4f7;
+    color:#8a96a3;
+  }
+  .settings-panel{display:none;}
+  .settings-panel.active{display:block;}
+  .settings-panel-top{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-bottom:16px;
+  }
+  .settings-back{
+    width:38px;height:38px;
+    border:1px solid var(--line);
+    border-radius:12px;
+    background:var(--paper);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:var(--navy);
+  }
+  .settings-back svg{width:19px;height:19px;stroke:currentColor;}
+  .settings-panel-title{
+    margin:0;
+    color:var(--navy);
+    font:700 19px 'Space Grotesk',sans-serif;
+  }
+  .feature-card{
+    padding:18px;
+    border:1px solid var(--line);
+    border-radius:18px;
+    background:var(--paper);
+    color:var(--ink-soft);
+    font-size:12px;
+    line-height:1.65;
+  }
+  .feature-card strong{color:var(--navy);}
+  .feature-status{
+    display:inline-flex;
+    padding:5px 9px;
+    margin-bottom:12px;
+    border-radius:999px;
+    background:#fff3df;
+    color:#a45e00;
+    font-size:10px;
+    font-weight:700;
+  }
+  .guide-document{padding:2px 2px 18px;color:var(--ink);}
+  .guide-document-title{margin-top:2px;text-align:center;font-size:18px;font-weight:800;line-height:1.25;color:var(--navy-deep);}
+  .guide-document-subtitle{text-align:center;font-size:17px;font-weight:800;line-height:1.25;color:var(--navy-deep);}
+  .guide-document-audience{margin-top:5px;text-align:center;color:var(--ink-soft);font-size:11px;line-height:1.5;}
+  .guide-content-heading{margin-top:20px;font-size:13px;font-weight:800;color:var(--navy);}
+  .guide-toc{margin:5px 0 18px;padding-left:20px;color:var(--ink-soft);font-size:11.5px;line-height:1.6;}
+  .guide-toc li{margin-bottom:2px;}
+  .guide-document-section{margin-top:18px;}
+  .guide-document-section>h3{margin:0 0 13px;color:var(--navy-deep);font-size:15px;line-height:1.35;font-weight:800;}
+  .guide-document-subsection{margin-top:14px;}
+  .guide-document-subsection h4{margin:0 0 7px;color:var(--navy);font-size:13px;line-height:1.4;font-weight:800;}
+  .guide-document-subsection p{margin:0 0 8px;color:var(--ink-soft);font-size:11.5px;line-height:1.58;}
+  .guide-document-subsection ul{margin:0 0 8px;padding-left:20px;color:var(--ink-soft);font-size:11.5px;line-height:1.58;}
+  .guide-document-subsection li{margin-bottom:6px;}
+  .guide-list{margin:0;padding-left:20px;}
+  .guide-list li{margin-bottom:9px;}
+  .guide-intro{margin:0 0 12px;color:var(--ink-soft);font-size:12px;line-height:1.55;}
+  .guide-section{margin-top:12px;padding:14px;border:1px solid var(--line);border-radius:16px;background:var(--paper);}
+  .guide-section h3{margin:0 0 9px;color:var(--navy);font-size:14px;line-height:1.35;}
+  .guide-section p{margin:0 0 9px;color:var(--ink-soft);font-size:12px;line-height:1.55;}
+  .guide-section p:last-child{margin-bottom:0;}
+  .guide-section .guide-list{color:var(--ink-soft);font-size:12px;line-height:1.55;}
+  .guide-note{margin-top:10px;padding:10px 11px;border-radius:12px;background:#fff3df;color:#8b5b10;font-size:11px;line-height:1.5;}
+  .guide-step-head{display:flex;align-items:center;gap:9px;margin-bottom:9px;}
+  .guide-step-head h3{margin:0;}
+  .guide-step-number{width:26px;height:26px;flex:0 0 26px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:var(--navy);color:#fff;font:700 12px 'Space Grotesk',sans-serif;}
+  .guide-figure{margin:12px 0 0;border:1px solid #d8e1eb;border-radius:13px;overflow:hidden;background:#f4f7fa;}
+  .guide-image{display:block;width:100%;height:auto;max-height:380px;object-fit:contain;background:#f4f7fa;}
+  .guide-caption{margin:0;padding:8px 10px;border-top:1px solid #d8e1eb;background:#fff;color:var(--ink-soft);font-size:10.5px;line-height:1.45;text-align:center;}
+  .face-form{display:flex;flex-direction:column;gap:10px;}
+  .face-select{
+    width:100%;padding:12px;border:1px solid var(--line);border-radius:13px;
+    background:var(--paper);color:var(--ink);font:600 12px 'Be Vietnam Pro',sans-serif;
+  }
+  .face-camera{
+    position:relative;overflow:hidden;border-radius:18px;background:#071421;
+    aspect-ratio:3/4;max-height:420px;display:flex;align-items:center;justify-content:center;
+  }
+  .face-camera video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:none;}
+  .face-camera img{width:100%;height:100%;object-fit:contain;display:none;}
+  .face-camera.photo-preview img{display:block;}
+  .face-camera.photo-preview .face-camera-placeholder{display:none;}
+  .face-camera.active video{display:block;}
+  .face-camera-placeholder{padding:24px;text-align:center;color:#c3d3e3;font-size:12px;line-height:1.6;}
+  .face-camera.active .face-camera-placeholder{display:none;}
+  .face-guide{
+    padding:10px 12px;border-radius:12px;background:#edf4fb;color:var(--navy);
+    text-align:center;font-size:12px;font-weight:700;
+  }
+  .face-progress{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;}
+  .face-step{
+    height:36px;border-radius:10px;border:1px solid var(--line);background:var(--paper);
+    display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-size:11px;font-weight:700;
+  }
+  .face-step.done{background:var(--teal-soft);border-color:#bfe6dd;color:#0c6b5c;}
+  .face-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;}
+  .face-btn{
+    border:0;border-radius:13px;padding:12px 10px;font:700 12px 'Be Vietnam Pro',sans-serif;
+    background:var(--navy);color:#fff;
+  }
+  .face-btn.secondary{background:#e7edf4;color:var(--navy);}
+  .face-btn.save{grid-column:1/-1;background:var(--teal);}
+  .face-btn:disabled{opacity:.45;cursor:not-allowed;}
+  .face-message{min-height:20px;color:var(--ink-soft);font-size:11px;line-height:1.5;text-align:center;}
+  .face-message.error{color:#a13f2f;}.face-message.success{color:#0c6b5c;}
+  .avatar-status{
+    display:flex;align-items:center;justify-content:center;min-height:42px;
+    padding:10px 12px;border:1px solid #cbd8e5;border-radius:11px;background:#fff;
+    box-shadow:0 5px 12px -10px rgba(15,39,67,.35);
+    font-size:13.5px;font-weight:700;line-height:1.45;color:var(--navy);
+  }
+  .avatar-status.error{background:var(--coral-soft);color:#a13f2f;}
+  .avatar-status.success{background:var(--teal-soft);color:#0c6b5c;}
+  .face-summary{
+    display:flex;justify-content:center;gap:14px;padding:10px;border-radius:12px;
+    background:#edf4fb;color:var(--navy);font-size:13px;font-weight:800;
+  }
+  .face-student-list{display:flex;flex-direction:column;gap:8px;max-height:430px;overflow:auto;}
+  .face-student-row{
+    display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:9px;align-items:center;
+    padding:11px;border:1px solid var(--line);border-radius:13px;background:var(--paper);
+  }
+  .face-student-stt{font:700 12px 'Space Grotesk',sans-serif;color:var(--navy);}
+  .face-student-name{font-size:12px;font-weight:700;color:var(--ink);}
+  .face-student-date{margin-top:3px;font-size:10px;color:var(--ink-soft);}
+  .face-register-btn{
+    border:0;border-radius:10px;padding:8px 9px;background:var(--navy);color:#fff;
+    font:700 10px 'Be Vietnam Pro',sans-serif;white-space:nowrap;
+  }
+  .face-register-btn.update{background:var(--teal);}
+  .avatar-row-actions{display:flex;align-items:center;gap:5px;}
+  .face-register-btn.avatar-delete-btn{background:var(--coral);padding-left:8px;padding-right:8px;}
+  .face-scan-area{display:none;flex-direction:column;gap:10px;}
+  .face-scan-area.active{display:flex;}
+  .face-scan-student{font-size:13px;font-weight:700;color:var(--navy);text-align:center;}
+  .face-pose-sequence{font-size:11px;line-height:1.65;text-align:center;color:var(--ink-soft);}
+  .face-analysis-progress{height:8px;border-radius:999px;overflow:hidden;background:#dfe6ee;}
+  .face-analysis-bar{height:100%;width:0;background:var(--teal);transition:width .2s ease;}
+
+</style>
+</head>
+<body>
+
+<div>
+  <div class="device">
+
+    <div id="pageAttendance" class="app-page active-page">
+      <div class="tabbar-top">
+        <div class="tabbar-title">WebAPP Điểm Danh</div>
+      <div class="camera-icon-btn">
+        <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      </div>
+    </div>
+
+    <div class="tabbar">
+      <div class="filter-stack">
+        <div class="select-wrap">
+          <svg class="select-icon" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5-10-5z"/><path d="M6 12v5c0 1.66 2.69 3 6 3s6-1.34 6-3v-5"/></svg>
+          <select class="filter-select" id="classSelect">
+            <option value="">Đang tải lớp...</option>
+          </select>
+          <svg class="select-chevron" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </div>
+
+        <div class="select-wrap">
+          <svg class="select-icon" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <select class="filter-select" id="teacherSelect" disabled>
+            <option value="">Chọn lớp trước</option>
+          </select>   
+          <svg class="select-chevron" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </div>
+
+        <div class="select-wrap">
+          <svg class="select-icon" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          <select class="filter-select" id="subjectSelect" disabled>
+            <option value="">Chọn lớp trước</option>
+          </select>
+          <svg class="select-chevron" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+
+      <div class="session-toggle">
+        <div class="session-btn active">
+          <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+          Buổi sáng
+        </div>
+        <div class="session-btn">
+          <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          Buổi chiều
+        </div>
+      </div>
+      <div class="session-hint">
+        Tự động chọn theo giờ hệ thống · chạm để đổi buổi nếu cần điểm danh bù
+      </div>
+
+      <div class="eyebrow">Hồ sơ học sinh</div>
+
+      <div class="student-card" id="studentCard">
+        <div class="avatar" id="studentAvatar" role="button" tabindex="0" aria-label="Chưa có ảnh để xem" aria-disabled="true">
+          <span class="avatar-initials" id="studentAvatarInitials">--</span>
+          <img id="studentAvatarImage" alt="Ảnh học sinh" loading="eager" decoding="async">
+        </div>
+        <div class="student-meta">
+          <h2 id="studentName">Chọn lớp để tải học sinh</h2>
+          <p id="studentMeta">—</p>
+          <span class="id-pill" id="studentId">—</span>
+        </div>
+        <button type="button" class="quick-student-list-btn" id="studentQuickListButton" disabled aria-label="Mở danh sách học sinh">
+          <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3" cy="6" r="1"/><circle cx="3" cy="12" r="1"/><circle cx="3" cy="18" r="1"/></svg>
+          Danh sách
+        </button>
+      </div>
+
+      <div class="date-picker-row">
+        <div class="date-info">
+          <span class="date-badge" id="dateBadge">Hôm nay</span>
+          <span class="date-value" id="dateValueText">—</span>
+        </div>
+        <div class="date-input-wrap">
+          <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          <input type="date" class="date-input" id="attendanceDate">
+        </div>
+      </div>
+
+      <div class="status-row">
+        <div class="status-btn present" data-status="PRESENT"><span class="dot"></span>Có mặt</div>
+        <div class="status-btn absent" data-status="ABSENT"><span class="dot"></span>Vắng</div>
+        <div class="status-btn excused" data-status="EXCUSED"><span class="dot"></span>Có phép</div>
+      </div>
+      <div id="attendanceStatus" style="text-align:center;margin-top:8px;font-size:10.5px;color:var(--ink-soft);font-weight:600;">
+        Chưa điểm danh
+      </div>
+
+      <div class="contact-groups">
+
+        <div class="contact-group student">
+          <div class="contact-group-head">
+            <div class="avatar-sm">HS</div>
+            <div class="who">Học sinh<span id="contactStudentName">—</span></div>
+          </div>
+          <div class="contact-row">
+            <div class="contact-btn">
+              <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+              Gọi điện
+            </div>
+            <div class="contact-btn zalo">
+              <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+              Zalo
+            </div>
+            <div class="contact-btn">
+              <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+              Tin nhắn
+            </div>
+          </div>
+        </div>
+
+        <div class="contact-group father">
+          <div class="contact-group-head">
+            <div class="avatar-sm">CH</div>
+            <div class="who">Cha<span id="contactFatherName">—</span></div>
+          </div>
+          <div class="contact-row">
+            <div class="contact-btn">
+              <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+              Gọi điện
+            </div>
+            <div class="contact-btn zalo">
+              <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+              Zalo
+            </div>
+            <div class="contact-btn">
+              <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+              Tin nhắn
+            </div>
+          </div>
+        </div>
+
+        <div class="contact-group mother">
+          <div class="contact-group-head">
+            <div class="avatar-sm">ME</div>
+            <div class="who">Mẹ<span id="contactMotherName">—</span></div>
+          </div>
+          <div class="contact-row">
+            <div class="contact-btn">
+              <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+              Gọi điện
+            </div>
+            <div class="contact-btn zalo">
+              <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+              Zalo
+            </div>
+            <div class="contact-btn">
+              <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+              Tin nhắn
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          Thông tin môn học
+        </div>
+        <div class="profile-body subject-profile-body">
+          <div class="info-row"><span class="k">Tên môn học</span><span class="v" id="subjectInfoName">—</span></div>
+          <div class="info-row"><span class="k">Học kỳ</span><span class="v" id="subjectInfoHocKy">—</span></div>
+          <div class="info-row"><span class="k">Tổng số giờ</span><span class="v" id="subjectInfoTongSoGio">—</span></div>
+          <div class="info-row subject-progress-row" data-subject-field="NgayBatDau"><span class="k">Ngày bắt đầu</span><span class="v" id="subjectInfoNgayBatDau">—</span></div>
+          <div class="info-row subject-progress-row" data-subject-field="TienDo"><span class="k">Tiến độ giảng dạy</span><span class="v" id="subjectInfoTienDo">—</span></div>
+          <div class="info-row"><span class="k">Lý thuyết</span><span class="v" id="subjectInfoDanhSachMH">—</span></div>
+          <div class="info-row"><span class="k">Thực hành</span><span class="v" id="subjectInfoThucHanh">—</span></div>
+          <div class="info-row"><span class="k">Thi</span><span class="v" id="subjectInfoThi">—</span></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          <span id="absenceStatsTitle">Thống kê tháng: — buổi</span>
+          <span class="cap" id="absenceStatsSubject">Chọn môn học</span>
+        </div>
+        <div class="stats-grid">
+          <div class="stat excused">
+            <div class="num" id="excusedAbsenceCount">—</div>
+            <div class="lbl" id="excusedAbsenceLabel">Buổi vắng có phép - — giờ</div>
+          </div>
+          <div class="stat absent">
+            <div class="num" id="unexcusedAbsenceCount">—</div>
+            <div class="lbl" id="unexcusedAbsenceLabel">Buổi vắng không phép - — giờ</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          Thông tin lý lịch học sinh
+        </div>
+        <div class="profile-body">
+          <div class="info-row"><span class="k">Ngày sinh</span><span class="v" id="profileBirthDate">—</span></div>
+          <div class="info-row"><span class="k">CCCD</span><span class="v" id="profileCCCD">—</span></div>
+          <div class="info-row"><span class="k">BHYT</span><span class="v" id="profileBHYT">—</span></div>
+          <div class="info-row"><span class="k">Cha</span><span class="v" id="profileFather">—</span></div>
+          <div class="info-row"><span class="k">Mẹ</span><span class="v" id="profileMother">—</span></div>
+          <div class="info-row"><span class="k">Địa chỉ</span><span class="v" id="profileAddress">—</span></div>
+          <div class="info-row profile-note-row" id="profileNoteRow" role="button" tabindex="0" aria-label="Chỉnh sửa ghi chú học sinh">
+            <span class="k">Ghi chú</span><span class="v" id="profileNote"></span>
+            <svg class="profile-note-edit" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    </div>
+
+    <div id="pageSettings" class="app-page" aria-hidden="true">
+      <div class="settings-page">
+        <section id="settingsMenuPanel" class="settings-panel active">
+          <div class="settings-header">
+            <h2>Cài đặt</h2>
+            <p>Chọn chức năng cần sử dụng.</p>
+          </div>
+
+          <div class="settings-menu">
+            <button type="button" class="settings-item" data-settings-target="settingsFacePanel">
+              <span class="settings-item-icon">
+                <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><circle cx="12" cy="11" r="3"/><path d="M7.5 18c.8-2.2 2.3-3.3 4.5-3.3s3.7 1.1 4.5 3.3"/></svg>
+              </span>
+              <span class="settings-item-copy">
+                <span class="settings-item-title">Đăng ký khuôn mặt</span>
+                <span class="settings-item-note">Quay Face ID và lưu 5 vector khuôn mặt</span>
+              </span>
+              <svg class="settings-chevron" fill="none" viewBox="0 0 24 24" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+
+            <button type="button" class="settings-item" data-settings-target="settingsAvatarPanel">
+              <span class="settings-item-icon">
+                <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="12" cy="10" r="3"/><path d="M7 18c.8-2.5 2.5-3.8 5-3.8s4.2 1.3 5 3.8"/></svg>
+              </span>
+              <span class="settings-item-copy">
+                <span class="settings-item-title">Ảnh đại diện</span>
+                <span class="settings-item-note">Chụp và cập nhật ảnh hồ sơ học sinh</span>
+              </span>
+              <svg class="settings-chevron" fill="none" viewBox="0 0 24 24" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+
+            <button type="button" class="settings-item" data-settings-target="settingsExportPanel">
+              <span class="settings-item-icon">
+                <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2"/></svg>
+              </span>
+              <span class="settings-item-copy">
+                <span class="settings-item-title">Export dữ liệu</span>
+                <span class="settings-item-note">Xuất dữ liệu điểm danh và báo cáo</span>
+              </span>
+              <svg class="settings-chevron" fill="none" viewBox="0 0 24 24" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+
+            <button type="button" class="settings-item" data-settings-target="settingsGuidePanel">
+              <span class="settings-item-icon">
+                <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.6 2.6 0 1 1 4.5 1.8c-1.2 1-2 1.4-2 3.2"/><path d="M12 17h.01"/></svg>
+              </span>
+              <span class="settings-item-copy">
+                <span class="settings-item-title">Hướng dẫn sử dụng</span>
+                <span class="settings-item-note">Xem các bước sử dụng WebApp</span>
+              </span>
+              <svg class="settings-chevron" fill="none" viewBox="0 0 24 24" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+
+            <div class="settings-item future">
+              <span class="settings-item-icon">
+                <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+              </span>
+              <span class="settings-item-copy">
+                <span class="settings-item-title">Chức năng khác</span>
+                <span class="settings-item-note">Sẽ được bổ sung sau</span>
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <section id="settingsFacePanel" class="settings-panel">
+          <div class="settings-panel-top">
+            <button type="button" class="settings-back" aria-label="Quay lại Cài đặt"><svg fill="none" viewBox="0 0 24 24" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg></button>
+            <h2 class="settings-panel-title">Đăng ký khuôn mặt</h2>
+          </div>
+          <div class="feature-card face-form">
+            <select id="faceClassSelect" class="face-select"><option value="">Chọn lớp</option></select>
+            <div id="faceSummary" class="face-summary">
+              <span>Đã đăng ký: 0</span><span>Chưa đăng ký: 0</span>
+            </div>
+            <div id="faceStudentList" class="face-student-list">
+              <div class="face-message">Chọn lớp để xem danh sách học sinh.</div>
+            </div>
+
+            <div id="faceScanArea" class="face-scan-area">
+              <div id="faceScanStudent" class="face-scan-student"></div>
+              <div id="faceGuide" class="face-guide">Quay video khuôn mặt</div>
+              <div class="face-pose-sequence">Trong một video 8–12 giây, thực hiện chậm:<br><strong>Nhìn thẳng → trái → phải → ngẩng lên → cúi xuống</strong></div>
+              <div class="face-analysis-progress"><div id="faceAnalysisBar" class="face-analysis-bar"></div></div>
+              <div class="face-actions">
+                <button type="button" id="faceVideoButton" class="face-btn">Quay video Face ID</button>
+                <button type="button" id="faceCancelButton" class="face-btn secondary">Hủy</button>
+              </div>
+              <div id="faceMessage" class="face-message">Video chỉ xử lý trên thiết bị, không lưu lên Drive.</div>
+            </div>
+            <video id="faceVideoDecoder" muted playsinline preload="metadata" hidden></video>
+            <canvas id="faceCaptureCanvas" hidden></canvas>
+            <input id="faceVideoInput" type="file" accept="video/*" capture="user" hidden>
+          </div>
+        </section>
+
+        <section id="settingsAvatarPanel" class="settings-panel">
+          <div class="settings-panel-top">
+            <button type="button" class="settings-back" aria-label="Quay lại Cài đặt"><svg fill="none" viewBox="0 0 24 24" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg></button>
+            <h2 class="settings-panel-title">Ảnh đại diện</h2>
+          </div>
+          <div class="feature-card face-form">
+            <select id="avatarClassSelect" class="face-select"><option value="">Chọn lớp</option></select>
+            <div id="avatarSummary" class="face-summary">
+              <span>Số ảnh đại diện: 0/0 ảnh</span>
+            </div>
+            <div id="avatarMessage" class="face-message avatar-status">Trạng thái: Chọn lớp để kiểm tra ảnh đại diện.</div>
+            <div id="avatarStudentList" class="face-student-list">
+              <div class="face-message">Chọn lớp để xem danh sách học sinh.</div>
+            </div>
+            <img id="avatarPhotoDecoder" alt="" hidden>
+            <canvas id="avatarCaptureCanvas" hidden></canvas>
+            <input id="avatarPhotoInput" type="file" accept="image/*" capture="user" hidden>
+          </div>
+        </section>
+
+        <section id="settingsExportPanel" class="settings-panel">
+          <div class="settings-panel-top">
+            <button type="button" class="settings-back" aria-label="Quay lại Cài đặt"><svg fill="none" viewBox="0 0 24 24" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg></button>
+            <h2 class="settings-panel-title">Export dữ liệu</h2>
+          </div>
+          <div class="feature-card"><span class="feature-status">Đang chuẩn bị</span><br><strong>Màn hình Export đã được tách riêng.</strong><br>Các lựa chọn lớp, thời gian, loại báo cáo và định dạng xuất sẽ được bổ sung sau.</div>
+        </section>
+
+        <section id="settingsGuidePanel" class="settings-panel">
+          <div class="settings-panel-top">
+            <button type="button" class="settings-back" aria-label="Quay lại Cài đặt"><svg fill="none" viewBox="0 0 24 24" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg></button>
+            <h2 class="settings-panel-title">Hướng dẫn sử dụng</h2>
+          </div>
+
+          <div class="guide-document">
+            <div class="guide-document-title">HƯỚNG DẪN SỬ DỤNG</div>
+            <div class="guide-document-subtitle">WEBAPP ĐIỂM DANH</div>
+            <div class="guide-document-audience">Tài liệu dành cho giáo viên</div>
+
+            <div class="guide-content-heading">Nội dung</div>
+            <ul class="guide-toc">
+              <li>1. Điểm danh</li>
+              <li>2. Một số chức năng phụ</li>
+            </ul>
+
+            <section class="guide-document-section">
+              <h3>1. ĐIỂM DANH</h3>
+
+              <div class="guide-document-subsection">
+                <h4>1.1. Chọn lớp, giáo viên và môn học</h4>
+                <p>Tiến hành chọn theo thứ tự: Chọn lớp → Chọn giáo viên → Chọn môn học.</p>
+                <figure class="guide-figure"><img class="guide-image" loading="lazy" src="https://drive.google.com/thumbnail?id=1Ha6089bXIUAyOSNZyqjlCfIUCcZsANmJ&amp;sz=w1200" alt="Màn hình chọn lớp trên WebApp Điểm Danh"><figcaption class="guide-caption">Màn hình chọn lớp trên WebApp Điểm Danh</figcaption></figure>
+              </div>
+
+              <div class="guide-document-subsection">
+                <h4>1.2. Chọn buổi học</h4>
+                <p>Phần này web sẽ tự động chọn theo thời gian thực tế khi mở web. Người dùng chỉ cần tự chọn lại buổi học trong trường hợp điểm danh bù.</p>
+                <p>Chọn Buổi sáng / Buổi chiều — tự động theo giờ hệ thống</p>
+              </div>
+
+              <div class="guide-document-subsection">
+                <h4>1.3. Điểm danh thực tế</h4>
+                <p>Chỉ việc bấm vào các nút “Có mặt”, “Vắng”, “Có Phép”. Trạng thái dòng chữ bên dưới cho biết học sinh được điểm danh đã lưu hay chưa.</p>
+                <ul>
+                  <li>Trong trường hợp lớp không vắng ai thì vẫn phải điểm danh ít nhất 1 lần bằng cách bấm nút “Có mặt” để Web lưu lại ngày dạy, người dạy và môn dạy.</li>
+                  <li>Trong lần điểm danh đầu tiên, Web chạy khá chậm; những lần tiếp theo sẽ chạy nhanh hơn.</li>
+                  <li>Để điểm danh học sinh tiếp theo, có thể vuốt màn hình sang trái (tiến) hoặc vuốt sang phải (lùi) ngay tại vị trí khung tên học sinh.</li>
+                  <li>Cũng có thể chọn một học sinh bất kỳ bằng cách bấm vào “Danh sách” và chọn học sinh muốn điểm danh.</li>
+                </ul>
+                <figure class="guide-figure"><img class="guide-image" loading="lazy" src="https://drive.google.com/thumbnail?id=1kPZy5XjHYYKv3228Atl82QWhw6mOafjE&amp;sz=w1200" alt="Hồ sơ học sinh với các nút Có mặt / Vắng / Có phép"><figcaption class="guide-caption">Hồ sơ học sinh với các nút Có mặt / Vắng / Có phép</figcaption></figure>
+              </div>
+
+              <div class="guide-document-subsection">
+                <h4>1.4. Điểm danh bù</h4>
+                <ul>
+                  <li>Bấm vào biểu tượng “Lịch” để chọn ngày cần điểm danh bù.</li>
+                  <li>Tiếp tục chọn “Danh sách” để chọn học sinh cần điểm danh bù.</li>
+                  <li>Tiếp tục chọn “Buổi sáng” hay “Buổi chiều”.</li>
+                  <li>Chọn trạng thái điểm danh phù hợp.</li>
+                </ul>
+              </div>
+            </section>
+
+            <section class="guide-document-section">
+              <h3>2. MỘT SỐ CHỨC NĂNG PHỤ</h3>
+
+              <div class="guide-document-subsection">
+                <h4>a) Liên hệ phụ huynh</h4>
+                <ul>
+                  <li>Theo thứ tự lần lượt là: gọi bằng Sim, gọi bằng Zalo, nhắn tin bằng Zalo hoặc SMS.</li>
+                  <li>Thông tin học sinh nào có số điện thoại sẽ sáng nổi lên; học sinh nào không có sẽ mờ xuống.</li>
+                  <li>Thông tin số điện thoại phải được cập nhật riêng bằng file Excel, không tự cập nhật được qua web.</li>
+                </ul>
+                <figure class="guide-figure"><img class="guide-image" loading="lazy" src="https://drive.google.com/thumbnail?id=1Qf_bsV_anCBKeROaFJc-Q4sPZV6rM2e2&amp;sz=w1200" alt="Các nút liên hệ Học sinh / Cha / Mẹ"><figcaption class="guide-caption">Các nút liên hệ Học sinh / Cha / Mẹ</figcaption></figure>
+              </div>
+
+              <div class="guide-document-subsection">
+                <h4>b) Xem số lượng học sinh đi học trong một buổi</h4>
+                <p>Chức năng này giúp giáo viên chủ nhiệm (GVCN) biết được số lượng học sinh đi học trong một buổi học.</p>
+                <ul>
+                  <li>Chọn đúng lớp, đúng ngày, đúng buổi, đúng môn.</li>
+                  <li>Bấm vào nút “Danh sách”, đợi khoảng vài giây, nhìn vào bảng: dấu tick tròn xanh là có đi học, dấu x tròn đỏ là vắng, chữ P tròn cam là vắng có phép.</li>
+                </ul>
+                <figure class="guide-figure"><img class="guide-image" loading="lazy" src="https://drive.google.com/thumbnail?id=13esFhZwY31ke6NaGNF1Cno4BT8mJ1sZQ&amp;sz=w1200" alt="Danh sách lớp với trạng thái điểm danh"><figcaption class="guide-caption">Danh sách lớp với trạng thái điểm danh</figcaption></figure>
+              </div>
+
+              <div class="guide-document-subsection">
+                <h4>c) Thông tin học sinh và môn học</h4>
+                <p>Phần này hiển thị trực quan, nhìn vào là hiểu.</p>
+                <p>Lưu ý: Khi sử dụng chức năng ghi chú không xóa ghi chú của người viết trước đó; hãy xuống dòng để thêm ghi chú mới.</p>
+              </div>
+
+              <div class="guide-document-subsection">
+                <h4>d) Chụp ảnh đại diện</h4>
+                <p>Chức năng dành cho giáo viên chủ nhiệm, thao tác tương tự như chụp ảnh thẻ.</p>
+                <figure class="guide-figure"><img class="guide-image" loading="lazy" src="https://drive.google.com/thumbnail?id=1oC8KDcUQTlxc8paL9QrzRBtLnaFiuzpk&amp;sz=w1200" alt="Hồ sơ học sinh kèm ảnh đại diện"><figcaption class="guide-caption">Hồ sơ học sinh kèm ảnh đại diện</figcaption></figure>
+              </div>
+            </section>
+          </div>
+        </section>
+
+          <section class="guide-section">
+            <div class="guide-step-head"><span class="guide-step-number">2</span><h3>Điểm danh học sinh</h3></div>
+            <ol class="guide-list">
+              <li>Chọn học sinh rồi bấm <strong>Có mặt</strong>, <strong>Vắng</strong> hoặc <strong>Có phép</strong>.</li>
+              <li>Xem dòng trạng thái bên dưới các nút để biết dữ liệu đã được lưu.</li>
+              <li>Vuốt sang trái để tới học sinh tiếp theo, vuốt sang phải để quay lại.</li>
+            </ol>
+            <div class="guide-note">Nếu cả lớp đều có mặt, vẫn cần bấm “Có mặt” ít nhất một lần để lưu ngày dạy, giáo viên và môn học. Lần đầu trong một buổi có thể chậm hơn.</div>
+            <figure class="guide-figure"><img class="guide-image" loading="lazy" src="https://drive.google.com/thumbnail?id=1kPZy5XjHYYKv3228Atl82QWhw6mOafjE&amp;sz=w1200" alt="Hồ sơ học sinh và các nút điểm danh"><figcaption class="guide-caption">Bước 2: Chọn đúng trạng thái cho học sinh đang hiển thị.</figcaption></figure>
+          </section>
+
+          <section class="guide-section">
+            <div class="guide-step-head"><span class="guide-step-number">3</span><h3>Xem nhanh sĩ số và điểm danh bù</h3></div>
+            <ol class="guide-list">
+              <li>Bấm biểu tượng lịch và chọn ngày cần điểm danh bù.</li>
+              <li>Chọn đúng lớp, giáo viên, môn học và buổi học.</li>
+              <li>Bấm <strong>Danh sách</strong> để tìm học sinh hoặc xem sĩ số: ✓ xanh là có mặt, × đỏ là vắng, P cam là có phép.</li>
+            </ol>
+            <figure class="guide-figure"><img class="guide-image" loading="lazy" src="https://drive.google.com/thumbnail?id=13esFhZwY31ke6NaGNF1Cno4BT8mJ1sZQ&amp;sz=w1200" alt="Danh sách lớp hiển thị trạng thái điểm danh"><figcaption class="guide-caption">Bước 3: Nhìn màu và ký hiệu để biết nhanh học sinh vắng.</figcaption></figure>
+          </section>
+
+          <section class="guide-section">
+            <div class="guide-step-head"><span class="guide-step-number">4</span><h3>Chức năng phụ</h3></div>
+            <ol class="guide-list">
+              <li><strong>Liên hệ phụ huynh:</strong> gọi SIM, gọi/nhắn Zalo hoặc nhắn SMS. Nút bị mờ nghĩa là chưa có số điện thoại.</li>
+              <li><strong>Thông tin học sinh và môn học:</strong> xem trực tiếp trên hồ sơ. Khi thêm ghi chú, không xóa nội dung của người viết trước; hãy xuống dòng để bổ sung.</li>
+              <li><strong>Ảnh đại diện:</strong> giáo viên chủ nhiệm có thể chụp và cập nhật ảnh hồ sơ học sinh.</li>
+            </ol>
+            <figure class="guide-figure"><img class="guide-image" loading="lazy" src="https://drive.google.com/thumbnail?id=1Qf_bsV_anCBKeROaFJc-Q4sPZV6rM2e2&amp;sz=w1200" alt="Hình minh họa chức năng hỗ trợ"></figure>
+            <figure class="guide-figure"><img class="guide-image" loading="lazy" src="https://drive.google.com/thumbnail?id=1oC8KDcUQTlxc8paL9QrzRBtLnaFiuzpk&amp;sz=w1200" alt="Hồ sơ học sinh với ảnh đại diện"><figcaption class="guide-caption">Bước 4: Các tiện ích trên hồ sơ học sinh.</figcaption></figure>
+          </section>
+        </section>
+      </div>
+    </div>
+    <div id="pageStats" class="app-page blank-page" aria-hidden="true"></div>
+    <div id="pageScores" class="app-page blank-page" aria-hidden="true"></div>
+    <div id="pageTraining" class="app-page blank-page" aria-hidden="true"></div>
+
+    <div class="bottomnav" id="bottomNav">
+      <div class="navitem" data-page="pageSettings">
+        <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Cài đặt
+      </div>
+      <div class="navitem active" data-page="pageAttendance">
+        <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
+        Điểm danh
+        <span class="ring"></span>
+      </div>
+      <div class="navitem" data-page="pageStats">
+        <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+        Thống kê
+      </div>
+      <div class="navitem" data-page="pageScores">
+        <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
+        Điểm
+      </div>
+      <div class="navitem" data-page="pageTraining">
+        <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+        Rèn luyện
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<div class="message-sheet-overlay" id="messageChoiceOverlay">
+  <div class="message-sheet" role="dialog" aria-modal="true" aria-labelledby="messageChoiceTitle">
+    <div class="message-sheet-title" id="messageChoiceTitle">Chọn cách nhắn tin</div>
+    <button type="button" class="message-choice zalo-choice" id="messageByZalo">Nhắn qua Zalo</button>
+    <button type="button" class="message-choice" id="messageBySms">Nhắn bằng SMS</button>
+    <button type="button" class="message-choice cancel-choice" id="cancelMessageChoice">Hủy</button>
+  </div>
+</div>
+
+<div class="message-sheet-overlay" id="avatarDeleteOverlay">
+  <div class="message-sheet" role="dialog" aria-modal="true" aria-labelledby="avatarDeleteTitle">
+    <div class="message-sheet-title" id="avatarDeleteTitle">Xóa ảnh đại diện?</div>
+    <div class="avatar-delete-copy" id="avatarDeleteCopy">Ảnh trên Drive và LinkAnh trong Google Sheets sẽ bị xóa.</div>
+    <button type="button" class="message-choice delete-choice" id="confirmAvatarDelete">Có, xóa ảnh</button>
+    <button type="button" class="message-choice cancel-choice" id="cancelAvatarDelete">Không</button>
+  </div>
+</div>
+
+<div class="photo-viewer-overlay" id="studentPhotoViewer" aria-hidden="true">
+  <div class="photo-viewer-dialog" role="dialog" aria-modal="true" aria-labelledby="studentPhotoViewerName">
+    <button type="button" class="photo-viewer-close" id="closeStudentPhotoViewer" aria-label="Đóng ảnh">×</button>
+    <img class="photo-viewer-image" id="studentPhotoLarge" alt="Ảnh đại diện học sinh">
+    <div class="photo-viewer-name" id="studentPhotoViewerName"></div>
+  </div>
+</div>
+
+<div class="message-sheet-overlay" id="studentJumpOverlay" aria-hidden="true">
+  <div class="message-sheet student-jump-sheet" role="dialog" aria-modal="true" aria-labelledby="studentJumpTitle">
+    <div class="student-jump-top">
+      <div class="message-sheet-title" id="studentJumpTitle">Danh sách học sinh</div>
+      <button type="button" class="student-jump-close" id="closeStudentJumpList" aria-label="Đóng danh sách">×</button>
+    </div>
+    <input type="search" class="student-jump-search" id="studentJumpSearch" placeholder="Tìm theo tên hoặc MSSV" autocomplete="off">
+    <div class="student-jump-list" id="studentJumpList"></div>
+  </div>
+</div>
+
+<div class="message-sheet-overlay" id="classPickerOverlay" aria-hidden="true">
+  <div class="message-sheet class-picker-sheet" role="dialog" aria-modal="true" aria-labelledby="classPickerTitle">
+    <div class="class-picker-top">
+      <div class="message-sheet-title" id="classPickerTitle">Chọn lớp</div>
+      <button type="button" class="class-picker-close" id="closeClassPicker" aria-label="Đóng danh sách lớp">×</button>
+    </div>
+    <div class="class-picker-list" id="classPickerList"></div>
+  </div>
+</div>
+
+<div class="message-sheet-overlay" id="studentNoteOverlay" aria-hidden="true">
+  <div class="message-sheet student-note-sheet" role="dialog" aria-modal="true" aria-labelledby="studentNoteTitle">
+    <div class="message-sheet-title" id="studentNoteTitle">Ghi chú học sinh</div>
+    <textarea class="student-note-textarea" id="studentNoteInput" maxlength="1000" placeholder="Nhập ghi chú..." autocomplete="off"></textarea>
+    <div class="student-note-status" id="studentNoteStatus"></div>
+    <div class="student-note-actions">
+      <button type="button" class="message-choice cancel-choice" id="cancelStudentNote">Hủy</button>
+      <button type="button" class="message-choice delete-choice" id="deleteStudentNote">Xóa</button>
+      <button type="button" class="message-choice save-choice" id="saveStudentNoteButton">Lưu</button>
+    </div>
+  </div>
+</div>
+
+<div class="message-sheet-overlay" id="studentNoteDeleteOverlay" aria-hidden="true">
+  <div class="message-sheet" role="dialog" aria-modal="true" aria-labelledby="studentNoteDeleteTitle">
+    <div class="message-sheet-title" id="studentNoteDeleteTitle">Xóa ghi chú?</div>
+    <div class="avatar-delete-copy" id="studentNoteDeleteCopy">Toàn bộ nội dung ghi chú sẽ bị xóa.</div>
+    <button type="button" class="message-choice delete-choice" id="confirmStudentNoteDelete">Có, xóa</button>
+    <button type="button" class="message-choice cancel-choice" id="cancelStudentNoteDelete">Không</button>
+  </div>
+</div>
+
+<script>
+  /* KHỐI 1: đặt ngày hôm nay và hiển thị "Hôm nay" hoặc "Điểm danh bù". */
+  (function(){
+    var input = document.getElementById('attendanceDate');
+    var badge = document.getElementById('dateBadge');
+    var valueText = document.getElementById('dateValueText');
+    var weekdays = ['Chủ nhật','Thứ Hai','Thứ Ba','Thứ Tư','Thứ Năm','Thứ Sáu','Thứ Bảy'];
+
+    function toLocalISO(d){
+      var tzOffset = d.getTimezoneOffset() * 60000;
+      return new Date(d - tzOffset).toISOString().slice(0,10);
+    }
+
+    function render(){
+      var picked = new Date(input.value + 'T00:00:00');
+      var todayISO = toLocalISO(new Date());
+      var isToday = input.value === todayISO;
+
+      var dd = String(picked.getDate()).padStart(2,'0');
+      var mm = String(picked.getMonth()+1).padStart(2,'0');
+      var yyyy = picked.getFullYear();
+      valueText.textContent = weekdays[picked.getDay()] + ', ' + dd + '/' + mm + '/' + yyyy;
+
+      if(isToday){
+        badge.textContent = 'Hôm nay';
+        badge.classList.remove('makeup');
+      } else {
+        badge.textContent = 'Điểm danh bù';
+        badge.classList.add('makeup');
+      }
+    }
+
+    var todayISO = toLocalISO(new Date());
+    input.value = todayISO;
+    input.max = todayISO;
+    render();
+    input.addEventListener('change', function(){
+      if(!input.value){ input.value = todayISO; }
+      render();
+    });
+  })();
+</script>
+
+<script>
+/*
+ * KHỐI 2: dữ liệu và chức năng chính của giao diện.
+ * google.script.run là cầu nối từ Index.html sang các hàm trong Code.gs.
+ */
+let students = [];
+let currentStudentIndex = 0;
+let currentClassName = '';
+let loadingRequest = 0;
+let pointerStartX = 0;
+let pointerStartY = 0;
+let pointerTracking = false;
+// localStorage chỉ tồn tại trên đúng trình duyệt của thiết bị đang sử dụng.
+// Vì vậy lựa chọn trên điện thoại GV1 không ảnh hưởng điện thoại GV2, GV3...
+const STORAGE_DEFAULT_TEACHER = 'attendance_default_teacher';
+const STORAGE_DEFAULT_CLASS = 'attendance_default_class';
+const STORAGE_SUBJECT_PREFIX = 'attendance_default_subject_';
+const STORAGE_TEACHERS_PREFIX = 'attendance_teachers_cache_';
+const STORAGE_CLASSES = 'attendance_classes_cache';
+
+let subjectDetails = [];
+let currentSubjects = [];
+const adjacentPhotoCache = new Map();
+const MAX_PRELOADED_PHOTOS = 6;
+const profilePhotoDataCache = new Map();
+const MAX_PROFILE_PHOTO_DATA_CACHE = 12;
+const profilePhotoProxyPending = new Set();
+let profilePhotoProxyMode = false;
+let profilePhotoPreloadGeneration = 0;
+const FACE_MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/model';
+const FACE_CAPTURE_GUIDES = [
+  'Nhìn thẳng vào camera',
+  'Quay mặt nhẹ sang trái',
+  'Quay mặt nhẹ sang phải',
+  'Ngẩng mặt nhẹ lên',
+  'Cúi mặt nhẹ xuống'
+];
+let faceModelsPromise = null;
+let faceCameraStream = null;
+let faceRegistrationStudents = [];
+let faceCapturedVectors = [];
+let faceCaptureBusy = false;
+let faceSelectedStudent = null;
+let avatarStudents = [];
+let avatarSelectedStudent = null;
+let avatarBusy = false;
+let avatarDeleteStudent = null;
+let activeClassPickerSelect = null;
+let studentNoteBusy = false;
+let studentNoteTarget = null;
+let attendanceWarmupTimer = null;
+let attendanceWarmupKey = '';
+let absenceStatsTimer = null;
+let attendanceStatusByStudent = {};
+
+/**
+ * Thay các ô Lớp, Giáo viên và Môn học bằng danh sách HTML tùy chỉnh.
+ * Android/iPhone áp dụng ngay khi chạm, không hiện Next hoặc "H.tất".
+ */
+function setupClassPickers() {
+  ['classSelect', 'teacherSelect', 'subjectSelect', 'faceClassSelect', 'avatarClassSelect'].forEach(function(selectId) {
+    const select = document.getElementById(selectId);
+    if (!select || select.dataset.customClassPicker === '1') return;
+    select.dataset.customClassPicker = '1';
+    select.classList.add('class-native-select');
+
+    const trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = (select.closest('.select-wrap') ? 'filter-select ' : 'face-select ') + 'class-picker-trigger';
+    trigger.setAttribute('aria-haspopup', 'dialog');
+    trigger.dataset.classPickerFor = selectId;
+    select.insertAdjacentElement('afterend', trigger);
+
+    trigger.addEventListener('click', function() { openClassPicker(selectId); });
+    select.addEventListener('change', function() { syncClassPickerTrigger(select); });
+    new MutationObserver(function() { syncClassPickerTrigger(select); }).observe(select, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['disabled']
+    });
+    syncClassPickerTrigger(select);
+  });
+
+  document.getElementById('closeClassPicker').addEventListener('click', closeClassPicker);
+  document.getElementById('classPickerOverlay').addEventListener('click', function(event) {
+    if (event.target === this) closeClassPicker();
+  });
+}
+
+function syncClassPickerTrigger(select) {
+  if (!select) return;
+  const trigger = document.querySelector('[data-class-picker-for="' + select.id + '"]');
+  if (!trigger) return;
+  const option = select.options[select.selectedIndex] || select.options[0];
+  trigger.textContent = option ? option.textContent : 'Chọn lớp';
+  trigger.disabled = Boolean(select.disabled);
+  trigger.setAttribute('aria-label', trigger.textContent);
+}
+
+function openClassPicker(selectId) {
+  const select = document.getElementById(selectId);
+  if (!select || select.disabled) return;
+  activeClassPickerSelect = select;
+  const pickerTitles = {
+    classSelect: 'Chọn lớp',
+    teacherSelect: 'Chọn giáo viên',
+    subjectSelect: 'Chọn môn học',
+    faceClassSelect: 'Chọn lớp',
+    avatarClassSelect: 'Chọn lớp'
+  };
+  const pickerTitle = pickerTitles[selectId] || 'Chọn nội dung';
+  document.getElementById('classPickerTitle').textContent = pickerTitle;
+  const list = document.getElementById('classPickerList');
+  list.dataset.pickerFor = selectId;
+  list.innerHTML = '';
+
+  const options = Array.from(select.options).filter(function(option) { return Boolean(option.value); });
+  options.forEach(function(option) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'class-picker-option' + (option.value === select.value ? ' current' : '');
+    button.textContent = option.textContent;
+    button.addEventListener('click', function() {
+      const changed = select.value !== option.value;
+      select.value = option.value;
+      syncClassPickerTrigger(select);
+      closeClassPicker();
+      if (changed) select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    list.appendChild(button);
+  });
+
+  if (!options.length) list.innerHTML = '<div class="class-picker-empty">Chưa có nội dung để lựa chọn.</div>';
+  const overlay = document.getElementById('classPickerOverlay');
+  overlay.classList.add('show');
+  overlay.setAttribute('aria-hidden', 'false');
+}
+
+function closeClassPicker() {
+  const overlay = document.getElementById('classPickerOverlay');
+  overlay.classList.remove('show');
+  overlay.setAttribute('aria-hidden', 'true');
+  activeClassPickerSelect = null;
+}
+
+function normalizeSubjectText(value) {
+  return String(value || '').trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd').replace(/\s+/g, ' ');
+}
+
+/**
+ * Bảo đảm hai trường H/I luôn có chỗ hiển thị, kể cả khi HTML được ghép từ
+ * một mẫu giao diện cũ. Bình thường hai dòng đã có sẵn nên hàm không tạo lại.
+ */
+function ensureSubjectProgressRows() {
+  const body = document.querySelector('.subject-profile-body');
+  if (!body) return;
+
+  const totalValue = document.getElementById('subjectInfoTongSoGio');
+  let anchor = totalValue ? totalValue.closest('.info-row') : null;
+
+  function ensureRow(id, field, label) {
+    const existingValue = document.getElementById(id);
+    if (existingValue) {
+      anchor = existingValue.closest('.info-row') || anchor;
+      return;
+    }
+
+    const row = document.createElement('div');
+    row.className = 'info-row subject-progress-row';
+    row.dataset.subjectField = field;
+
+    const key = document.createElement('span');
+    key.className = 'k';
+    key.textContent = label;
+
+    const value = document.createElement('span');
+    value.className = 'v';
+    value.id = id;
+    value.textContent = '—';
+
+    row.appendChild(key);
+    row.appendChild(value);
+    if (anchor && anchor.parentNode === body) {
+      anchor.insertAdjacentElement('afterend', row);
+    } else {
+      body.appendChild(row);
+    }
+    anchor = row;
+  }
+
+  ensureRow('subjectInfoNgayBatDau', 'NgayBatDau', 'Ngày bắt đầu');
+  ensureRow('subjectInfoTienDo', 'TienDo', 'Tiến độ giảng dạy');
+}
+
+function clearSubjectInfo() {
+  ensureSubjectProgressRows();
+  setText('subjectInfoName', '—');
+  setText('subjectInfoHocKy', '—');
+  setText('subjectInfoTongSoGio', '—');
+  setText('subjectInfoNgayBatDau', '—');
+  setText('subjectInfoTienDo', '—');
+  setText('subjectInfoDanhSachMH', '—');
+  setText('subjectInfoThucHanh', '—');
+  setText('subjectInfoThi', '—');
+}
+
+function updateSubjectInfo() {
+  ensureSubjectProgressRows();
+  const select = document.getElementById('subjectSelect');
+  const selectedName = select ? String(select.value || '').trim() : '';
+
+  if (!selectedName || !Array.isArray(subjectDetails)) {
+    clearSubjectInfo();
+    return;
+  }
+
+  const wanted = normalizeSubjectText(selectedName);
+  const info = subjectDetails.find(function(item) {
+    return normalizeSubjectText(item.TenMH) === wanted;
+  });
+
+  if (!info) {
+    clearSubjectInfo();
+    setText('subjectInfoName', selectedName);
+    return;
+  }
+
+  setText('subjectInfoName', info.TenMH || selectedName);
+  setText('subjectInfoHocKy', info.HocKy || '—');
+  setText('subjectInfoTongSoGio', info.TongSoGio || '—');
+  setText('subjectInfoNgayBatDau', info.NgayBatDau || '—');
+  setText('subjectInfoTienDo', formatStudyProgress(info.TienDo, info.TongSoGio));
+  setText('subjectInfoDanhSachMH', info.DanhSachMH || '—');
+  setText('subjectInfoThucHanh', info.ThucHanh || '—');
+  setText('subjectInfoThi', info.Thi || '—');
+}
+
+function formatStudyProgress(progress, totalHours) {
+  const cleanProgress = String(progress == null ? '' : progress)
+    .trim().replace(/\s*giờ\s*$/i, '');
+  const cleanTotal = String(totalHours == null ? '' : totalHours)
+    .trim().replace(/\s*giờ\s*$/i, '');
+  if (!cleanProgress && !cleanTotal) return '—';
+  return (cleanProgress || '0') + '/' + (cleanTotal || '—') + ' giờ';
+}
+
+
+
+/** Khi WebApp mở chỉ tải danh sách lớp; GV và môn được tải theo lớp đã chọn. */
+function loadAppConfig() {
+  // Hiện danh sách đã dùng gần nhất ngay, không bắt người dùng nhìn ô tải trống
+  // trong lúc Apps Script khởi động và kiểm tra lại INFO ở nền.
+  try {
+    const cachedClasses = JSON.parse(localStorage.getItem(STORAGE_CLASSES) || '[]');
+    if (Array.isArray(cachedClasses) && cachedClasses.length) {
+      fillSelect('classSelect', cachedClasses, 'Chọn lớp');
+      restoreSelectValue('classSelect', localStorage.getItem(STORAGE_DEFAULT_CLASS));
+    }
+  } catch (error) {
+    localStorage.removeItem(STORAGE_CLASSES);
+  }
+
+  setSelectWaiting('teacherSelect', 'Chọn lớp trước');
+  setSelectWaiting('subjectSelect', 'Chọn lớp trước');
+
+  bindSelectionEvents();
+
+  // Nếu đã nhớ lớp, bắt đầu tải lớp ngay; không chờ lượt kiểm tra INFO kết thúc.
+  const cachedClass = document.getElementById('classSelect').value;
+  if (cachedClass) loadSelectedClass();
+
+  google.script.run
+    .withSuccessHandler(function(config) {
+      const classes = config.classes || [];
+      fillSelect('classSelect', classes, 'Chọn lớp');
+      localStorage.setItem(STORAGE_CLASSES, JSON.stringify(classes));
+
+      setupStudentSwipe();
+      restoreSelectValue('classSelect', localStorage.getItem(STORAGE_DEFAULT_CLASS));
+
+      // Nếu thiết bị đã nhớ một lớp hợp lệ thì tự tải lớp đó ngay khi mở WebApp.
+      if (document.getElementById('classSelect').value &&
+          currentClassName !== document.getElementById('classSelect').value) {
+        loadSelectedClass();
+      } else if (!document.getElementById('classSelect').value) {
+        showNoStudent(classes.length ? 'Chọn lớp để tải học sinh' : 'Chưa có lớp được cấu hình');
+      }
+    })
+    .withFailureHandler(function(error) {
+      // Không xóa lớp đã tải được từ bộ nhớ trình duyệt nếu INFO tạm thời lỗi.
+      if (!currentClassName) showNoStudent('Không tải được danh sách lớp');
+      alert('Không tải được dữ liệu:\n' + getErrorMessage(error));
+    })
+    .getAppConfig();
+}
+
+/** Chỉ gắn sự kiện một lần, trước cả khi Google trả dữ liệu về. */
+function bindSelectionEvents() {
+  const classSelect = document.getElementById('classSelect');
+  const teacherSelect = document.getElementById('teacherSelect');
+  const subjectSelect = document.getElementById('subjectSelect');
+  if (classSelect.dataset.eventsBound === '1') return;
+  classSelect.dataset.eventsBound = '1';
+
+  classSelect.addEventListener('change', function() {
+    if (this.value) localStorage.setItem(STORAGE_DEFAULT_CLASS, this.value);
+    loadSelectedClass();
+  });
+  teacherSelect.addEventListener('change', function() {
+    if (this.value) localStorage.setItem(STORAGE_DEFAULT_TEACHER, this.value);
+    prepareSubjectSelection();
+  });
+  subjectSelect.addEventListener('change', function() {
+    const className = classSelect.value;
+    if (className && this.value) {
+      localStorage.setItem(STORAGE_SUBJECT_PREFIX + className, this.value);
+    }
+    updateSubjectInfo();
+    attendanceWarmupKey = '';
+    warmAttendanceSession();
+  });
+}
+
+function readCachedClassTeachers(className) {
+  try {
+    const value = JSON.parse(
+      localStorage.getItem(STORAGE_TEACHERS_PREFIX + String(className || '')) || '[]'
+    );
+    return Array.isArray(value) ? value.filter(Boolean) : [];
+  } catch (error) {
+    localStorage.removeItem(STORAGE_TEACHERS_PREFIX + String(className || ''));
+    return [];
+  }
+}
+
+function applyClassTeachers(className, teachers) {
+  const list = Array.isArray(teachers) ? teachers.filter(Boolean) : [];
+  const teacherSelect = document.getElementById('teacherSelect');
+  const selectedTeacher = teacherSelect.value || localStorage.getItem(STORAGE_DEFAULT_TEACHER);
+  fillSelect('teacherSelect', list, list.length ? 'Chọn giáo viên' : 'Chưa có giáo viên');
+  restoreSelectValue('teacherSelect', selectedTeacher);
+  try {
+    localStorage.setItem(STORAGE_TEACHERS_PREFIX + className, JSON.stringify(list));
+  } catch (error) {
+    // Thiết bị chặn bộ nhớ cục bộ vẫn dùng bình thường với dữ liệu máy chủ.
+  }
+}
+
+/** Tải môn học và danh sách học sinh khi người dùng chọn lớp. */
+function loadSelectedClass() {
+  const className = document.getElementById('classSelect').value;
+  const requestId = ++loadingRequest;
+  currentClassName = className;
+  students = [];
+  attendanceStatusByStudent = {};
+  currentSubjects = [];
+  subjectDetails = [];
+  attendanceWarmupKey = '';
+  clearTimeout(attendanceWarmupTimer);
+  clearTimeout(absenceStatsTimer);
+  clearSubjectInfo();
+  adjacentPhotoCache.clear();
+  profilePhotoDataCache.clear();
+  profilePhotoProxyPending.clear();
+  profilePhotoProxyMode = false;
+  profilePhotoPreloadGeneration++;
+  currentStudentIndex = 0;
+
+  if (!className) {
+    setSelectWaiting('teacherSelect', 'Chọn lớp trước');
+    setSelectWaiting('subjectSelect', 'Chọn lớp trước');
+    showNoStudent('Chọn lớp để tải học sinh');
+    return;
+  }
+
+  const cachedTeachers = readCachedClassTeachers(className);
+  if (cachedTeachers.length) {
+    applyClassTeachers(className, cachedTeachers);
+  } else {
+    setSelectWaiting('teacherSelect', 'Đang tải giáo viên...');
+  }
+  setSelectWaiting('subjectSelect', 'Chọn giáo viên trước');
+  showNoStudent('Đang tải dữ liệu lớp ' + className + '...');
+
+  // Chỉ gọi Apps Script một lần. Danh sách GV đã nhớ được hiện ngay phía trên;
+  // bản mới cùng môn học/học sinh sẽ về chung trong phản hồi này.
+  google.script.run
+    .withSuccessHandler(function(data) {
+      if (requestId !== loadingRequest) return;
+      applyClassTeachers(className, data.teachers || []);
+      currentSubjects = Array.isArray(data.subjects) ? data.subjects : [];
+      subjectDetails = Array.isArray(data.subjectDetails) ? data.subjectDetails : [];
+      prepareSubjectSelection();
+      students = Array.isArray(data.students) ? data.students : [];
+      currentStudentIndex = 0;
+      if (!students.length) {
+        showNoStudent('Không có học sinh trong lớp ' + className);
+        return;
+      }
+      showStudent(0);
+      warmAttendanceSession();
+    })
+    .withFailureHandler(function(error) {
+      if (requestId !== loadingRequest) return;
+      students = [];
+      currentStudentIndex = 0;
+      showNoStudent('Lỗi tải dữ liệu lớp ' + className);
+      alert('Không tải được lớp ' + className + ':\n' + getErrorMessage(error));
+    })
+    .getClassData(className, document.getElementById('attendanceDate').value);
+}
+
+/** Chỉ mở bước chọn môn sau khi đã chọn giáo viên. */
+function prepareSubjectSelection() {
+  const teacherSelect = document.getElementById('teacherSelect');
+  if (!teacherSelect || !teacherSelect.value) {
+    setSelectWaiting('subjectSelect', 'Chọn giáo viên trước');
+    clearSubjectInfo();
+    return;
+  }
+  fillSelect('subjectSelect', currentSubjects, 'Chọn môn học');
+  restoreLastSubject(document.getElementById('classSelect').value);
+  updateSubjectInfo();
+  warmAttendanceSession();
+}
+
+function getActiveSessionCode() {
+  const activeSession = document.querySelector('.session-btn.active');
+  const sessionButtons = Array.from(document.querySelectorAll('.session-btn'));
+  return sessionButtons.indexOf(activeSession) === 1 ? 'C' : 'S';
+}
+
+function scheduleAbsenceStats(delay) {
+  clearTimeout(absenceStatsTimer);
+  absenceStatsTimer = setTimeout(function() {
+    absenceStatsTimer = null;
+    if (!attendanceSaving) loadAbsenceStats();
+  }, Number(delay) >= 0 ? Number(delay) : 250);
+}
+
+function cancelPendingAttendanceBackground() {
+  clearTimeout(attendanceWarmupTimer);
+  clearTimeout(absenceStatsTimer);
+  attendanceWarmupTimer = null;
+  absenceStatsTimer = null;
+  // Kết quả thống kê cũ đang trên đường về sẽ không được đưa lên giao diện.
+  absenceStatsRequest++;
+}
+
+/**
+ * Chờ người dùng dừng thao tác rồi mới nạp ngầm. Thống kê V/P chỉ chạy sau
+ * khi nạp ngầm hoàn tất để không có hai yêu cầu tranh với thao tác lưu.
+ */
+function warmAttendanceSession() {
+  const className = document.getElementById('classSelect').value;
+  const dateInput = document.getElementById('attendanceDate');
+  const subject = document.getElementById('subjectSelect').value;
+  if (!className || !dateInput || !dateInput.value || !subject || !students.length) return;
+
+  const student = students[0];
+  const session = getActiveSessionCode();
+  const key = [className, dateInput.value, session, normalizeSubjectText(subject)].join('|');
+  if (attendanceWarmupKey === key) {
+    scheduleAbsenceStats(250);
+    return;
+  }
+  attendanceStatusByStudent = {};
+  const openStudentList = document.getElementById('studentJumpOverlay');
+  if (openStudentList && openStudentList.classList.contains('show')) {
+    renderStudentJumpList(document.getElementById('studentJumpSearch').value);
+  }
+  clearTimeout(attendanceWarmupTimer);
+  clearTimeout(absenceStatsTimer);
+  attendanceWarmupTimer = setTimeout(function() {
+    attendanceWarmupTimer = null;
+    if (attendanceSaving) return;
+    attendanceWarmupKey = key;
+    google.script.run
+      .withSuccessHandler(function(result) {
+        applyAttendanceStatusData(result, key);
+        const progress = result && result.subjectProgress;
+        if (progress && normalizeSubjectText(progress.subject) === normalizeSubjectText(subject)) {
+          const currentInfo = subjectDetails.find(function(item) {
+            return normalizeSubjectText(item.TenMH) === normalizeSubjectText(progress.subject);
+          });
+          if (currentInfo) {
+            currentInfo.NgayBatDau = progress.NgayBatDau || '';
+            currentInfo.TienDo = progress.TienDo || '0';
+            currentInfo._StoredNgayBatDau = progress.StoredNgayBatDau || '';
+            currentInfo._StoredTienDo = progress.StoredTienDo || '0';
+            currentInfo._SchoolYearStart = progress.schoolYearStart;
+            if (normalizeSubjectText(document.getElementById('subjectSelect').value) === normalizeSubjectText(progress.subject)) {
+              updateSubjectInfo();
+            }
+          }
+        }
+        scheduleAbsenceStats(120);
+      })
+      .withFailureHandler(function() {
+        if (attendanceWarmupKey === key) attendanceWarmupKey = '';
+        scheduleAbsenceStats(120);
+      })
+      .prepareAttendanceSession({
+        className: className,
+        attendanceDate: dateInput.value,
+        session: session,
+        subject: subject,
+        studentSTT: student.STT,
+        studentName: student.HoVaTen
+      });
+  }, 2500);
+}
+
+/** Cập nhật ký hiệu trong Danh sách lớp theo đúng ngày và buổi đang chọn. */
+function applyAttendanceStatusData(result, key) {
+  if (attendanceWarmupKey !== key) return;
+  const next = {};
+  const items = result && Array.isArray(result.attendanceStatuses) ? result.attendanceStatuses : [];
+  items.forEach(function(item) {
+    const stt = normalizeStudentStatusKey(item && item.studentSTT);
+    const status = String(item && item.status || '').toUpperCase();
+    if (stt && (status === 'PRESENT' || status === 'ABSENT' || status === 'EXCUSED')) next[stt] = status;
+  });
+  attendanceStatusByStudent = next;
+  const overlay = document.getElementById('studentJumpOverlay');
+  if (overlay && overlay.classList.contains('show')) renderStudentJumpList(document.getElementById('studentJumpSearch').value);
+}
+
+function normalizeStudentStatusKey(value) {
+  const text = String(value == null ? '' : value).trim();
+  const number = Number(text);
+  return text && isFinite(number) ? String(number) : text;
+}
+
+function getStudentJumpStatus(student) {
+  const status = attendanceStatusByStudent[normalizeStudentStatusKey(student && student.STT)];
+  if (status === 'PRESENT') return { key: 'present', symbol: '✓', label: 'Có mặt' };
+  if (status === 'ABSENT') return { key: 'absent', symbol: '×', label: 'Vắng' };
+  if (status === 'EXCUSED') return { key: 'excused', symbol: 'P', label: 'Có phép' };
+  return { key: 'unknown', symbol: '—', label: 'Chưa có trạng thái điểm danh' };
+}
+
+/** Hiển thị hồ sơ một học sinh theo vị trí trong danh sách. */
+function showStudent(index, direction) {
+  if (!students.length) return;
+  index = Math.max(0, Math.min(index, students.length - 1));
+  const student = students[index];
+  currentStudentIndex = index;
+  const quickListButton = document.getElementById('studentQuickListButton');
+  if (quickListButton) quickListButton.disabled = false;
+
+  animateStudentCard(direction, function() {
+    setText('studentName', student.HoVaTen || 'Chưa có tên');
+    setText('studentMeta', 'Lớp ' + (student.Lop || currentClassName || '—') +
+      ' · Số thứ tự ' + (student.STT || (index + 1)) +
+      ' · ' + (index + 1) + '/' + students.length);
+    setText('studentId', student.MSSV || '—');
+    showStudentPhoto(student.LinkAnh, student.HoVaTen, function() {
+      scheduleAdjacentPhotoPreload(index);
+      scheduleProxyAdjacentPhotoPreload(index);
+    });
+    setText('contactStudentName', student.HoVaTen || '—');
+    setText('contactFatherName', student.TenCha || '—');
+    setText('contactMotherName', student.TenMe || '—');
+    setText('profileBirthDate', student.NgaySinh || '—');
+    setText('profileCCCD', student.CCCD || '—');
+    setText('profileBHYT', student.BHYT || '—');
+    setText('profileFather', formatParentInfo(student.TenCha, student.SDT_Cha));
+    setText('profileMother', formatParentInfo(student.TenMe, student.SDT_Me));
+    setText('profileAddress', student.DiaChi || '—');
+    setText('profileNote', String(student.GhiChu || '').trim());
+    document.getElementById('profileNoteRow').setAttribute('aria-disabled', 'false');
+    updateContactButtons('.contact-group.student', student.SDT_HS);
+    updateContactButtons('.contact-group.father', student.SDT_Cha);
+    updateContactButtons('.contact-group.mother', student.SDT_Me);
+    clearAttendanceSelection();
+    setAttendanceMessage('Chưa điểm danh');
+    warmAttendanceSession();
+  });
+}
+
+/** Mở ô nhập ghi chú của học sinh đang hiển thị. */
+function openStudentNoteEditor() {
+  if (!students.length || studentNoteBusy) return;
+  const student = students[currentStudentIndex];
+  if (!student || !currentClassName) return;
+
+  studentNoteTarget = {
+    className: currentClassName,
+    studentSTT: String(student.STT || '').trim(),
+    studentName: String(student.HoVaTen || '').trim()
+  };
+  const input = document.getElementById('studentNoteInput');
+  input.value = String(student.GhiChu || '').trim();
+  document.getElementById('studentNoteTitle').textContent = 'Ghi chú · ' + (student.HoVaTen || 'Học sinh');
+  setStudentNoteStatus('');
+  setStudentNoteBusy(false);
+
+  const overlay = document.getElementById('studentNoteOverlay');
+  document.querySelector('.student-note-sheet').classList.remove('keyboard-active');
+  overlay.classList.add('show');
+  overlay.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('student-note-open');
+  input.scrollTop = 0;
+  // Ghi chú dài không tự bật bàn phím và không tự nhảy xuống cuối.
+  // Ghi chú trống vẫn mở bàn phím ngay để nhập nhanh.
+  if (!input.value) {
+    setTimeout(function() {
+      try { input.focus({ preventScroll: true }); } catch (error) { input.focus(); }
+    }, 80);
+  }
+}
+
+function closeStudentNoteEditor(force) {
+  if (studentNoteBusy && !force) return;
+  const overlay = document.getElementById('studentNoteOverlay');
+  if (!overlay || !overlay.classList.contains('show')) return;
+  closeStudentNoteDeleteConfirmation(false);
+  document.getElementById('studentNoteInput').blur();
+  document.querySelector('.student-note-sheet').classList.remove('keyboard-active');
+  overlay.classList.remove('show');
+  overlay.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('student-note-open');
+  studentNoteTarget = null;
+  setStudentNoteStatus('');
+}
+
+function setStudentNoteBusy(busy) {
+  studentNoteBusy = Boolean(busy);
+  document.getElementById('studentNoteInput').disabled = studentNoteBusy;
+  document.getElementById('saveStudentNoteButton').disabled = studentNoteBusy;
+  document.getElementById('cancelStudentNote').disabled = studentNoteBusy;
+  updateStudentNoteDeleteButton();
+}
+
+function updateStudentNoteDeleteButton() {
+  const button = document.getElementById('deleteStudentNote');
+  const input = document.getElementById('studentNoteInput');
+  button.disabled = studentNoteBusy || !String(input.value || '').trim();
+}
+
+function openStudentNoteDeleteConfirmation() {
+  if (studentNoteBusy || !studentNoteTarget || !document.getElementById('studentNoteInput').value.trim()) return;
+  document.getElementById('studentNoteInput').blur();
+  document.getElementById('studentNoteDeleteTitle').textContent = 'Xóa ghi chú?';
+  document.getElementById('studentNoteDeleteCopy').textContent =
+    'Toàn bộ ghi chú của ' + (studentNoteTarget.studentName || 'học sinh này') + ' sẽ bị xóa. Bạn có chắc chắn không?';
+  const overlay = document.getElementById('studentNoteDeleteOverlay');
+  overlay.classList.add('show');
+  overlay.setAttribute('aria-hidden', 'false');
+}
+
+function closeStudentNoteDeleteConfirmation(refocus) {
+  const overlay = document.getElementById('studentNoteDeleteOverlay');
+  if (!overlay) return;
+  overlay.classList.remove('show');
+  overlay.setAttribute('aria-hidden', 'true');
+}
+
+function confirmStudentNoteDelete() {
+  if (studentNoteBusy || !studentNoteTarget) return;
+  closeStudentNoteDeleteConfirmation(false);
+  document.getElementById('studentNoteInput').value = '';
+  updateStudentNoteDeleteButton();
+  saveCurrentStudentNote();
+}
+
+function setStudentNoteStatus(text, isError) {
+  const status = document.getElementById('studentNoteStatus');
+  status.textContent = text || '';
+  status.className = 'student-note-status' + (isError ? ' error' : '');
+}
+
+/** Lưu ghi chú vào cột GhiChu; nội dung trống sẽ xóa ô trên Sheet. */
+function saveCurrentStudentNote() {
+  if (studentNoteBusy || !studentNoteTarget) return;
+  const target = Object.assign({}, studentNoteTarget);
+  const note = document.getElementById('studentNoteInput').value.trim();
+  setStudentNoteBusy(true);
+  setStudentNoteStatus('Đang lưu ghi chú...');
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      const savedNote = String(result && result.note || '').trim();
+      const matchingStudent = students.find(function(student) {
+        const sameSTT = target.studentSTT && String(student.STT || '').trim() &&
+          Number(student.STT) === Number(target.studentSTT);
+        const sameName = normalizeSubjectText(student.HoVaTen) === normalizeSubjectText(target.studentName);
+        return sameSTT || sameName;
+      });
+      if (matchingStudent) matchingStudent.GhiChu = savedNote;
+
+      const currentStudent = students[currentStudentIndex];
+      if (currentStudent === matchingStudent) setText('profileNote', savedNote);
+      setStudentNoteBusy(false);
+      closeStudentNoteEditor(true);
+    })
+    .withFailureHandler(function(error) {
+      setStudentNoteBusy(false);
+      setStudentNoteStatus('Không lưu được: ' + getErrorMessage(error), true);
+    })
+    .saveStudentNote({
+      className: target.className,
+      studentSTT: target.studentSTT,
+      studentName: target.studentName,
+      note: note
+    });
+}
+
+function nextStudent() {
+  if (students.length && currentStudentIndex < students.length - 1) {
+    showStudent(currentStudentIndex + 1, 'left');
+  }
+}
+function previousStudent() {
+  if (students.length && currentStudentIndex > 0) {
+    showStudent(currentStudentIndex - 1, 'right');
+  }
+}
+
+/** Cho phép vuốt hoặc dùng phím mũi tên để chuyển học sinh. */
+function setupStudentSwipe() {
+  const screen = document.querySelector('.screen');
+  if (!screen || screen.dataset.swipeReady === '1') return;
+  screen.dataset.swipeReady = '1';
+
+  screen.addEventListener('pointerdown', function(event) {
+    if (event.target.closest('input, select, a, button, .status-btn, .session-btn, .contact-btn')) {
+      pointerTracking = false;
+      return;
+    }
+    pointerStartX = event.clientX;
+    pointerStartY = event.clientY;
+    pointerTracking = true;
+  });
+  screen.addEventListener('pointerup', function(event) {
+    if (!pointerTracking) return;
+    pointerTracking = false;
+    const dx = event.clientX - pointerStartX;
+    const dy = event.clientY - pointerStartY;
+    if (Math.abs(dx) < 60 || Math.abs(dx) <= Math.abs(dy) * 1.2) return;
+    if (dx < 0) nextStudent(); else previousStudent();
+  });
+  screen.addEventListener('pointercancel', function() { pointerTracking = false; });
+  document.addEventListener('keydown', function(event) {
+    if (event.target && event.target.closest && event.target.closest('input, select, textarea')) return;
+    if (event.key === 'ArrowRight') nextStudent();
+    if (event.key === 'ArrowLeft') previousStudent();
+  });
+}
+
+function animateStudentCard(direction, updateFunction) {
+  const card = document.getElementById('studentCard');
+  if (!card) { updateFunction(); return; }
+  card.classList.remove('swipe-out-left', 'swipe-out-right', 'swipe-in');
+  if (!direction) { updateFunction(); card.classList.add('swipe-in'); return; }
+  card.classList.add(direction === 'left' ? 'swipe-out-left' : 'swipe-out-right');
+  setTimeout(function() {
+    updateFunction();
+    card.classList.remove('swipe-out-left', 'swipe-out-right');
+    card.classList.add('swipe-in');
+  }, 130);
+}
+
+/** Gắn thao tác cho nút buổi học, trạng thái và ô ngày. */
+function setupInterfaceActions() {
+  const sessionButtons = document.querySelectorAll('.session-btn');
+  sessionButtons.forEach(function(button) {
+    button.addEventListener('click', function() {
+      sessionButtons.forEach(function(item) { item.classList.remove('active'); });
+      button.classList.add('active');
+      attendanceWarmupKey = '';
+      warmAttendanceSession();
+    });
+  });
+  const automaticIndex = new Date().getHours() < 12 ? 0 : 1;
+  sessionButtons.forEach(function(item) { item.classList.remove('active'); });
+  if (sessionButtons[automaticIndex]) sessionButtons[automaticIndex].classList.add('active');
+
+  document.querySelectorAll('.status-btn').forEach(function(button) {
+    button.addEventListener('click', function() {
+      if (!students.length) return;
+      submitAttendance(button);
+    });
+  });
+
+  const attendanceDate = document.getElementById('attendanceDate');
+  if (attendanceDate) attendanceDate.addEventListener('change', function() {
+    attendanceWarmupKey = '';
+    warmAttendanceSession();
+  });
+
+  document.getElementById('studentQuickListButton').addEventListener('click', openStudentJumpList);
+  document.getElementById('closeStudentJumpList').addEventListener('click', closeStudentJumpList);
+  document.getElementById('studentJumpSearch').addEventListener('input', function() {
+    renderStudentJumpList(this.value);
+  });
+  document.getElementById('studentJumpOverlay').addEventListener('click', function(event) {
+    if (event.target === this) closeStudentJumpList();
+  });
+
+  const profileNoteRow = document.getElementById('profileNoteRow');
+  profileNoteRow.addEventListener('click', openStudentNoteEditor);
+  profileNoteRow.addEventListener('keydown', function(event) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openStudentNoteEditor();
+    }
+  });
+  document.getElementById('saveStudentNoteButton').addEventListener('click', saveCurrentStudentNote);
+  document.getElementById('cancelStudentNote').addEventListener('click', function() { closeStudentNoteEditor(false); });
+  document.getElementById('deleteStudentNote').addEventListener('click', openStudentNoteDeleteConfirmation);
+  const studentNoteInput = document.getElementById('studentNoteInput');
+  const studentNoteSheet = document.querySelector('.student-note-sheet');
+  studentNoteInput.addEventListener('input', updateStudentNoteDeleteButton);
+  studentNoteInput.addEventListener('focus', function() {
+    studentNoteSheet.classList.add('keyboard-active');
+  });
+  studentNoteInput.addEventListener('blur', function() {
+    // Chờ thao tác bấm nút hoàn tất rồi mới mở rộng khung trở lại.
+    setTimeout(function() {
+      if (document.activeElement !== studentNoteInput) studentNoteSheet.classList.remove('keyboard-active');
+    }, 350);
+  });
+  document.getElementById('studentNoteOverlay').addEventListener('click', function(event) {
+    if (event.target === this) closeStudentNoteEditor(false);
+  });
+  document.getElementById('confirmStudentNoteDelete').addEventListener('click', confirmStudentNoteDelete);
+  document.getElementById('cancelStudentNoteDelete').addEventListener('click', function() {
+    closeStudentNoteDeleteConfirmation(false);
+  });
+  document.getElementById('studentNoteDeleteOverlay').addEventListener('click', function(event) {
+    if (event.target === this) closeStudentNoteDeleteConfirmation(false);
+  });
+
+  const studentAvatar = document.getElementById('studentAvatar');
+  studentAvatar.addEventListener('click', openStudentPhotoViewer);
+  studentAvatar.addEventListener('keydown', function(event) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openStudentPhotoViewer();
+    }
+  });
+  document.getElementById('closeStudentPhotoViewer').addEventListener('click', closeStudentPhotoViewer);
+  document.getElementById('studentPhotoLarge').addEventListener('error', function() {
+    const overlay = document.getElementById('studentPhotoViewer');
+    if (!overlay.classList.contains('show')) return;
+    closeStudentPhotoViewer();
+    alert('Không mở được ảnh đại diện kích thước lớn.');
+  });
+  document.getElementById('studentPhotoViewer').addEventListener('click', function(event) {
+    if (event.target === this || event.target.classList.contains('photo-viewer-dialog')) closeStudentPhotoViewer();
+  });
+  document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') closeStudentPhotoViewer();
+    if (event.key === 'Escape') closeStudentJumpList();
+    if (event.key === 'Escape') {
+      const deleteOverlay = document.getElementById('studentNoteDeleteOverlay');
+      if (deleteOverlay.classList.contains('show')) closeStudentNoteDeleteConfirmation(false);
+      else closeStudentNoteEditor(false);
+    }
+  });
+
+  setupSettingsNavigation();
+}
+
+/** Mở từng chức năng riêng trong Cài đặt và quay lại danh sách chính. */
+function showSettingsPanel(panelId) {
+  document.querySelectorAll('#pageSettings .settings-panel').forEach(function(panel) {
+    panel.classList.toggle('active', panel.id === panelId);
+  });
+  window.scrollTo(0, 0);
+}
+
+function setupSettingsNavigation() {
+  const page = document.getElementById('pageSettings');
+  if (!page || page.dataset.settingsReady === '1') return;
+  page.dataset.settingsReady = '1';
+
+  page.querySelectorAll('[data-settings-target]').forEach(function(item) {
+    item.addEventListener('click', function() {
+      showSettingsPanel(item.dataset.settingsTarget);
+      if (item.dataset.settingsTarget === 'settingsFacePanel') prepareFaceRegistrationPanel();
+      if (item.dataset.settingsTarget === 'settingsAvatarPanel') prepareAvatarPanel();
+    });
+  });
+  page.querySelectorAll('.settings-back').forEach(function(button) {
+    button.addEventListener('click', function() {
+      stopFaceCamera();
+      avatarSelectedStudent = null;
+      showSettingsPanel('settingsMenuPanel');
+    });
+  });
+
+  document.getElementById('faceClassSelect').addEventListener('change', loadFaceRegistrationClass);
+  document.getElementById('faceVideoButton').addEventListener('click', openFaceVideoCamera);
+  document.getElementById('faceCancelButton').addEventListener('click', closeFaceScan);
+  document.getElementById('faceVideoInput').addEventListener('change', processFaceVideo);
+  document.getElementById('avatarClassSelect').addEventListener('change', loadAvatarClass);
+  document.getElementById('avatarPhotoInput').addEventListener('change', processAvatarPhoto);
+  document.getElementById('confirmAvatarDelete').addEventListener('click', confirmAvatarDelete);
+  document.getElementById('cancelAvatarDelete').addEventListener('click', closeAvatarDeleteConfirmation);
+  document.getElementById('avatarDeleteOverlay').addEventListener('click', function(event) {
+    if (event.target === this) closeAvatarDeleteConfirmation();
+  });
+}
+
+function setFaceMessage(text, type) {
+  const element = document.getElementById('faceMessage');
+  element.textContent = text;
+  element.className = 'face-message' + (type ? ' ' + type : '');
+}
+
+function escapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
+
+function prepareFaceRegistrationPanel() {
+  const source = document.getElementById('classSelect');
+  const target = document.getElementById('faceClassSelect');
+  const oldValue = target.value || source.value;
+  target.innerHTML = '';
+  target.appendChild(new Option('Chọn lớp', ''));
+  Array.from(source.options).forEach(function(option) {
+    if (option.value) target.appendChild(new Option(option.textContent, option.value));
+  });
+  if (Array.from(target.options).some(function(option) { return option.value === oldValue; })) {
+    target.value = oldValue;
+  }
+  syncClassPickerTrigger(target);
+  if (target.value) loadFaceRegistrationClass();
+}
+
+function loadFaceRegistrationClass() {
+  closeFaceScan();
+  const className = document.getElementById('faceClassSelect').value;
+  const list = document.getElementById('faceStudentList');
+  if (!className) {
+    faceRegistrationStudents = [];
+    list.innerHTML = '<div class="face-message">Chọn lớp để xem danh sách học sinh.</div>';
+    updateFaceSummary();
+    return;
+  }
+
+  list.innerHTML = '<div class="face-message">Đang tải danh sách học sinh lớp ' + escapeHtml(className) + '...</div>';
+
+  if (className === currentClassName && students.length) {
+    renderFaceStudentList(students);
+    return;
+  }
+  google.script.run
+    .withSuccessHandler(function(data) { renderFaceStudentList(data.students || []); })
+    .withFailureHandler(function(error) {
+      list.innerHTML = '<div class="face-message error">Không tải được lớp: ' + escapeHtml(getErrorMessage(error)) + '</div>';
+    })
+    .getClassData(className);
+}
+
+function renderFaceStudentList(list) {
+  faceRegistrationStudents = Array.isArray(list) ? list : [];
+  const container = document.getElementById('faceStudentList');
+  container.innerHTML = '';
+  faceRegistrationStudents.forEach(function(student, index) {
+    const registered = isFaceRegistered(student);
+    const row = document.createElement('div');
+    row.className = 'face-student-row';
+    row.innerHTML =
+      '<div class="face-student-stt">' + escapeHtml(String(student.STT || index + 1).padStart(3, '0')) + '</div>' +
+      '<div><div class="face-student-name">' + escapeHtml(student.HoVaTen || 'Chưa có tên') + '</div>' +
+      '<div class="face-student-date">' + (registered ? 'Ngày đăng ký: ' + escapeHtml(student.NgayCapNhat || '—') : 'Chưa đăng ký') + '</div></div>' +
+      '<button type="button" class="face-register-btn' + (registered ? ' update' : '') + '" data-face-index="' + index + '">' +
+      (registered ? 'Cập nhật' : 'Đăng ký') + '</button>';
+    container.appendChild(row);
+  });
+  if (!faceRegistrationStudents.length) {
+    container.innerHTML = '<div class="face-message">Lớp chưa có học sinh.</div>';
+  }
+  container.querySelectorAll('[data-face-index]').forEach(function(button) {
+    button.addEventListener('click', function() { beginFaceScan(Number(button.dataset.faceIndex)); });
+  });
+  updateFaceSummary();
+}
+
+function isFaceRegistered(student) {
+  return normalizeSubjectText(student && student.TrangThai) === 'da dang ky';
+}
+
+function updateFaceSummary() {
+  const registered = faceRegistrationStudents.filter(isFaceRegistered).length;
+  const notRegistered = Math.max(0, faceRegistrationStudents.length - registered);
+  document.getElementById('faceSummary').innerHTML =
+    '<span>Đã đăng ký: ' + registered + '</span><span>Chưa đăng ký: ' + notRegistered + '</span>';
+}
+
+function beginFaceScan(index) {
+  faceSelectedStudent = faceRegistrationStudents[index] || null;
+  if (!faceSelectedStudent) return;
+  faceCapturedVectors = [];
+  faceCaptureBusy = false;
+  document.getElementById('faceVideoButton').disabled = false;
+  document.getElementById('faceCancelButton').disabled = false;
+  document.getElementById('faceAnalysisBar').style.width = '0%';
+  document.getElementById('faceScanStudent').textContent =
+    String(faceSelectedStudent.STT || '').padStart(3, '0') + ' - ' + faceSelectedStudent.HoVaTen;
+  document.getElementById('faceScanArea').classList.add('active');
+  document.getElementById('faceStudentList').style.display = 'none';
+  document.getElementById('faceSummary').style.display = 'none';
+  document.getElementById('faceClassSelect').disabled = true;
+  document.getElementById('faceGuide').textContent = 'Sẵn sàng quay video Face ID';
+  setFaceMessage('Bấm Quay video Face ID và thực hiện đủ 5 hướng trong 8–12 giây.');
+}
+
+function loadFaceModels() {
+  if (!window.faceapi) return Promise.reject(new Error('Không tải được thư viện nhận diện khuôn mặt.'));
+  if (!faceModelsPromise) {
+    faceModelsPromise = Promise.all([
+      faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URL),
+      faceapi.nets.faceLandmark68Net.loadFromUri(FACE_MODEL_URL),
+      faceapi.nets.faceRecognitionNet.loadFromUri(FACE_MODEL_URL)
+    ]);
+  }
+  return faceModelsPromise;
+}
+
+function openFaceVideoCamera() {
+  if (!faceSelectedStudent || faceCaptureBusy) return;
+  const input = document.getElementById('faceVideoInput');
+  input.value = '';
+  input.click();
+}
+
+function closeFaceScan() {
+  faceSelectedStudent = null;
+  faceCaptureBusy = false;
+  document.getElementById('faceVideoButton').disabled = false;
+  document.getElementById('faceCancelButton').disabled = false;
+  document.getElementById('faceScanArea').classList.remove('active');
+  document.getElementById('faceStudentList').style.display = '';
+  document.getElementById('faceSummary').style.display = '';
+  document.getElementById('faceClassSelect').disabled = false;
+  document.getElementById('faceAnalysisBar').style.width = '0%';
+  const video = document.getElementById('faceVideoDecoder');
+  if (video.dataset.objectUrl) URL.revokeObjectURL(video.dataset.objectUrl);
+  video.removeAttribute('src');
+  video.dataset.objectUrl = '';
+}
+
+function stopFaceCamera() { closeFaceScan(); }
+
+async function processFaceVideo(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file || !faceSelectedStudent || faceCaptureBusy) return;
+  faceCaptureBusy = true;
+  const button = document.getElementById('faceVideoButton');
+  button.disabled = true;
+  document.getElementById('faceCancelButton').disabled = true;
+  setFaceMessage('Đang tải mô hình và phân tích video...');
+  try {
+    await loadFaceModels();
+    const video = document.getElementById('faceVideoDecoder');
+    const objectUrl = URL.createObjectURL(file);
+    video.dataset.objectUrl = objectUrl;
+    video.src = objectUrl;
+    await waitForVideoMetadata(video);
+    if (!isFinite(video.duration) || video.duration < 4) throw new Error('Video quá ngắn. Hãy quay khoảng 8–12 giây.');
+    if (video.duration > 35) throw new Error('Video quá dài. Hãy quay lại khoảng 8–12 giây.');
+
+    const results = await extractFaceIdFrames(video);
+    faceCapturedVectors = results.map(function(item) { return Array.from(item.descriptor); });
+
+    document.getElementById('faceGuide').textContent = 'Đã nhận đủ 5 hướng';
+    setFaceMessage('Đang lưu 5 vector khuôn mặt...', 'success');
+    saveFaceRegistrationToGoogle();
+  } catch (error) {
+    setFaceMessage(getErrorMessage(error), 'error');
+    document.getElementById('faceGuide').textContent = 'Chưa đạt, vui lòng quay lại';
+  } finally {
+    const savingToGoogle = faceCapturedVectors.length === 5;
+    faceCaptureBusy = savingToGoogle;
+    button.disabled = savingToGoogle;
+    document.getElementById('faceCancelButton').disabled = savingToGoogle;
+  }
+}
+
+function waitForVideoMetadata(video) {
+  return new Promise(function(resolve, reject) {
+    if (video.readyState >= 1 && isFinite(video.duration)) return resolve();
+    const timer = setTimeout(function() { reject(new Error('Không đọc được video trên trình duyệt này.')); }, 15000);
+    video.onloadedmetadata = function() { clearTimeout(timer); resolve(); };
+    video.onerror = function() { clearTimeout(timer); reject(new Error('Định dạng video không được trình duyệt hỗ trợ.')); };
+    video.load();
+  });
+}
+
+function seekVideo(video, time) {
+  return new Promise(function(resolve, reject) {
+    const safeTime = Math.max(0, Math.min(time, Math.max(0, video.duration - 0.05)));
+    if (Math.abs(video.currentTime - safeTime) < 0.02 && video.readyState >= 2) return resolve();
+    const timer = setTimeout(function() { reject(new Error('Không lấy được khung hình từ video.')); }, 10000);
+    video.onseeked = function() { clearTimeout(timer); resolve(); };
+    video.onerror = function() { clearTimeout(timer); reject(new Error('Không đọc được khung hình video.')); };
+    video.currentTime = safeTime;
+  });
+}
+
+function drawVideoFrame(video) {
+  const canvas = document.getElementById('faceCaptureCanvas');
+  const scale = Math.min(1, 720 / Math.max(video.videoWidth, video.videoHeight));
+  canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+  canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+  canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+function facePoseMetrics(landmarks) {
+  const points = landmarks.positions;
+  function center(indices) {
+    const total = indices.reduce(function(sum, index) {
+      return { x: sum.x + points[index].x, y: sum.y + points[index].y };
+    }, { x: 0, y: 0 });
+    return { x: total.x / indices.length, y: total.y / indices.length };
+  }
+  const leftEye = center([36,37,38,39,40,41]);
+  const rightEye = center([42,43,44,45,46,47]);
+  const eyeMid = { x: (leftEye.x + rightEye.x) / 2, y: (leftEye.y + rightEye.y) / 2 };
+  const mouth = center([48,54]);
+  const nose = points[30];
+  const eyeDistance = Math.max(1, Math.hypot(rightEye.x - leftEye.x, rightEye.y - leftEye.y));
+  const eyeMouthDistance = Math.max(1, mouth.y - eyeMid.y);
+  return { yaw: (nose.x - eyeMid.x) / eyeDistance, pitch: (nose.y - eyeMid.y) / eyeMouthDistance };
+}
+
+async function extractFaceIdFrames(video) {
+  const centers = [0.10, 0.30, 0.50, 0.70, 0.90];
+  const offsets = [-0.045, 0, 0.045];
+  const segments = [];
+  for (let pose = 0; pose < centers.length; pose++) {
+    const candidates = [];
+    for (let sample = 0; sample < offsets.length; sample++) {
+      const time = video.duration * Math.max(0.02, Math.min(0.98, centers[pose] + offsets[sample]));
+      await seekVideo(video, time);
+      const canvas = drawVideoFrame(video);
+      const detections = await faceapi
+        .detectAllFaces(canvas, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.55 }))
+        .withFaceLandmarks()
+        .withFaceDescriptors();
+      if (detections.length === 1 && detections[0].detection.box.width >= canvas.width * 0.20) {
+        const metrics = facePoseMetrics(detections[0].landmarks);
+        candidates.push({
+          time: time,
+          score: detections[0].detection.score,
+          descriptor: detections[0].descriptor,
+          box: detections[0].detection.box,
+          yaw: metrics.yaw,
+          pitch: metrics.pitch
+        });
+      }
+      document.getElementById('faceAnalysisBar').style.width = Math.round(((pose * offsets.length + sample + 1) / 15) * 100) + '%';
+    }
+    if (!candidates.length) throw new Error('Không thấy rõ khuôn mặt ở đoạn ' + (pose + 1) + '/5. Hãy quay lại, đủ sáng và chỉ có một người.');
+    candidates.sort(function(a, b) { return b.score - a.score; });
+    segments.push(candidates[0]);
+  }
+
+  if (Math.abs(segments[1].yaw - segments[2].yaw) < 0.06) {
+    throw new Error('Chưa ghi nhận rõ hai hướng trái và phải. Hãy xoay mặt chậm và rõ hơn.');
+  }
+  if (Math.abs(segments[3].pitch - segments[4].pitch) < 0.025) {
+    throw new Error('Chưa ghi nhận rõ hai hướng ngẩng lên và cúi xuống. Hãy thực hiện rõ hơn.');
+  }
+  return segments;
+}
+
+function cropFacePhoto(sourceCanvas, box) {
+  const margin = Math.max(box.width, box.height) * 0.65;
+  const size = Math.min(sourceCanvas.width, sourceCanvas.height, Math.max(box.width, box.height) + margin * 2);
+  let x = box.x + box.width / 2 - size / 2;
+  let y = box.y + box.height / 2 - size / 2;
+  x = Math.max(0, Math.min(x, sourceCanvas.width - size));
+  y = Math.max(0, Math.min(y, sourceCanvas.height - size));
+  const output = document.createElement('canvas');
+  output.width = 480; output.height = 480;
+  output.getContext('2d').drawImage(sourceCanvas, x, y, size, size, 0, 0, 480, 480);
+  return output.toDataURL('image/jpeg', 0.86);
+}
+
+function saveFaceRegistrationToGoogle() {
+  const student = faceSelectedStudent;
+  const className = document.getElementById('faceClassSelect').value;
+  if (!student || faceCapturedVectors.length !== 5) return;
+  document.getElementById('faceVideoButton').disabled = true;
+  document.getElementById('faceCancelButton').disabled = true;
+  setFaceMessage('Đang lưu 5 vector lên Google Sheets...');
+  google.script.run
+    .withSuccessHandler(function(result) {
+      for (let i = 0; i < 5; i++) student['Vector' + (i + 1)] = result.vectors[i];
+      student.NgayCapNhat = result.ngayCapNhat;
+      student.TrangThai = result.trangThai;
+      student.DaDangKy = true;
+      if (className === currentClassName) {
+        const sameStudent = students.find(function(item) {
+          return Number(item.STT) === Number(student.STT);
+        });
+        if (sameStudent) Object.assign(sameStudent, student);
+      }
+      const savedName = student.HoVaTen;
+      closeFaceScan();
+      renderFaceStudentList(faceRegistrationStudents);
+      alert('Đăng ký khuôn mặt thành công cho ' + savedName + '.');
+    })
+    .withFailureHandler(function(error) {
+      faceCaptureBusy = false;
+      document.getElementById('faceVideoButton').disabled = false;
+      document.getElementById('faceCancelButton').disabled = false;
+      setFaceMessage('Lưu thất bại: ' + getErrorMessage(error), 'error');
+    })
+    .saveFaceRegistration({
+      className: className,
+      studentSTT: student.STT,
+      studentName: student.HoVaTen,
+      vectors: faceCapturedVectors
+    });
+}
+
+function setAvatarMessage(text, type) {
+  const element = document.getElementById('avatarMessage');
+  element.textContent = 'Trạng thái: ' + text;
+  element.className = 'face-message avatar-status' + (type ? ' ' + type : '');
+}
+
+function prepareAvatarPanel() {
+  const source = document.getElementById('classSelect');
+  const target = document.getElementById('avatarClassSelect');
+  const oldValue = target.value || source.value;
+  target.innerHTML = '';
+  target.appendChild(new Option('Chọn lớp', ''));
+  Array.from(source.options).forEach(function(option) {
+    if (option.value) target.appendChild(new Option(option.textContent, option.value));
+  });
+  if (Array.from(target.options).some(function(option) { return option.value === oldValue; })) target.value = oldValue;
+  syncClassPickerTrigger(target);
+  if (target.value) loadAvatarClass();
+}
+
+function loadAvatarClass() {
+  avatarSelectedStudent = null;
+  const className = document.getElementById('avatarClassSelect').value;
+  const list = document.getElementById('avatarStudentList');
+  if (!className) {
+    avatarStudents = [];
+    list.innerHTML = '<div class="face-message">Chọn lớp để xem danh sách học sinh.</div>';
+    updateAvatarSummary();
+    setAvatarMessage('Chọn lớp để kiểm tra ảnh đại diện.');
+    return;
+  }
+  setAvatarMessage('Đang kiểm tra ảnh đại diện của lớp ' + className + '...');
+  list.innerHTML = '<div class="face-message">Đang tải danh sách học sinh lớp ' + escapeHtml(className) + '...</div>';
+  // Luôn hỏi lại Code.gs khi mở mục Ảnh đại diện để kiểm tra file Drive thật sự
+  // còn tồn tại, thay vì dùng danh sách cũ đang giữ trong trình duyệt.
+  google.script.run
+    .withSuccessHandler(function(data) {
+      renderAvatarStudentList(data.students || []);
+      if (className === currentClassName) students = data.students || [];
+      const photoCount = getAvatarPhotoCount();
+      setAvatarMessage('Đã kiểm tra xong: ' + photoCount + '/' + avatarStudents.length + ' học sinh có ảnh.', 'success');
+    })
+    .withFailureHandler(function(error) {
+      list.innerHTML = '<div class="face-message error">Không tải được lớp: ' + escapeHtml(getErrorMessage(error)) + '</div>';
+      setAvatarMessage('Không kiểm tra được ảnh đại diện: ' + getErrorMessage(error), 'error');
+    })
+    .getAvatarClassData(className);
+}
+
+function renderAvatarStudentList(list) {
+  avatarStudents = Array.isArray(list) ? list : [];
+  const container = document.getElementById('avatarStudentList');
+  container.innerHTML = '';
+  avatarStudents.forEach(function(student, index) {
+    const hasPhoto = Boolean(String(student.LinkAnh || '').trim());
+    const row = document.createElement('div');
+    row.className = 'face-student-row';
+    row.innerHTML =
+      '<div class="face-student-stt">' + escapeHtml(String(student.STT || index + 1).padStart(3, '0')) + '</div>' +
+      '<div><div class="face-student-name">' + escapeHtml(student.HoVaTen || 'Chưa có tên') + '</div>' +
+      '<div class="face-student-date">' + (hasPhoto ? 'Có ảnh đại diện' : 'Chưa có ảnh') + '</div></div>' +
+      '<div class="avatar-row-actions"><button type="button" class="face-register-btn' + (hasPhoto ? ' update' : '') + '" data-avatar-index="' + index + '">' +
+      (hasPhoto ? 'Cập nhật' : 'Chụp ảnh') + '</button>' +
+      (hasPhoto ? '<button type="button" class="face-register-btn avatar-delete-btn" data-avatar-delete-index="' + index + '">Xóa</button>' : '') +
+      '</div>';
+    container.appendChild(row);
+  });
+  if (!avatarStudents.length) container.innerHTML = '<div class="face-message">Lớp chưa có học sinh.</div>';
+  container.querySelectorAll('[data-avatar-index]').forEach(function(button) {
+    button.addEventListener('click', function() { openAvatarCamera(Number(button.dataset.avatarIndex)); });
+  });
+  container.querySelectorAll('[data-avatar-delete-index]').forEach(function(button) {
+    button.addEventListener('click', function() { openAvatarDeleteConfirmation(Number(button.dataset.avatarDeleteIndex)); });
+  });
+  updateAvatarSummary();
+}
+
+function updateAvatarSummary() {
+  const hasPhoto = getAvatarPhotoCount();
+  document.getElementById('avatarSummary').innerHTML =
+    '<span>Số ảnh đại diện: ' + hasPhoto + '/' + avatarStudents.length + ' ảnh</span>';
+}
+
+function getAvatarPhotoCount() {
+  return avatarStudents.filter(function(student) {
+    return Boolean(String(student.LinkAnh || '').trim());
+  }).length;
+}
+
+function openAvatarDeleteConfirmation(index) {
+  if (avatarBusy) return;
+  avatarDeleteStudent = avatarStudents[index] || null;
+  if (!avatarDeleteStudent || !String(avatarDeleteStudent.LinkAnh || '').trim()) return;
+  document.getElementById('avatarDeleteTitle').textContent = 'Xóa ảnh của ' + avatarDeleteStudent.HoVaTen + '?';
+  document.getElementById('avatarDeleteCopy').textContent =
+    'Ảnh trên Drive và LinkAnh trong Google Sheets sẽ bị xóa. Bạn có chắc chắn không?';
+  document.getElementById('avatarDeleteOverlay').classList.add('show');
+}
+
+function closeAvatarDeleteConfirmation() {
+  if (avatarBusy) return;
+  document.getElementById('avatarDeleteOverlay').classList.remove('show');
+  avatarDeleteStudent = null;
+}
+
+function confirmAvatarDelete() {
+  const student = avatarDeleteStudent;
+  if (!student || avatarBusy) return;
+  const classSelect = document.getElementById('avatarClassSelect');
+  const className = classSelect.value;
+  const confirmButton = document.getElementById('confirmAvatarDelete');
+  const cancelButton = document.getElementById('cancelAvatarDelete');
+  avatarBusy = true;
+  classSelect.disabled = true;
+  confirmButton.disabled = true;
+  cancelButton.disabled = true;
+  setAvatarMessage('Đang xóa ảnh đại diện của ' + student.HoVaTen + '...');
+
+  google.script.run
+    .withSuccessHandler(function() {
+      student.LinkAnh = '';
+      if (className === currentClassName) {
+        const sameStudent = students.find(function(item) { return Number(item.STT) === Number(student.STT); });
+        if (sameStudent) sameStudent.LinkAnh = '';
+        if (students[currentStudentIndex] && Number(students[currentStudentIndex].STT) === Number(student.STT)) {
+          showStudentPhoto('', student.HoVaTen);
+        }
+      }
+      avatarBusy = false;
+      avatarDeleteStudent = null;
+      classSelect.disabled = false;
+      confirmButton.disabled = false;
+      cancelButton.disabled = false;
+      document.getElementById('avatarDeleteOverlay').classList.remove('show');
+      renderAvatarStudentList(avatarStudents);
+      setAvatarMessage('Đã xóa ảnh đại diện của ' + student.HoVaTen + '.', 'success');
+    })
+    .withFailureHandler(function(error) {
+      avatarBusy = false;
+      classSelect.disabled = false;
+      confirmButton.disabled = false;
+      cancelButton.disabled = false;
+      document.getElementById('avatarDeleteOverlay').classList.remove('show');
+      avatarDeleteStudent = null;
+      setAvatarMessage('Xóa ảnh thất bại: ' + getErrorMessage(error), 'error');
+    })
+    .deleteStudentProfilePhoto({
+      className: className,
+      studentSTT: student.STT,
+      studentName: student.HoVaTen
+    });
+}
+
+function openAvatarCamera(index) {
+  if (avatarBusy) return;
+  avatarSelectedStudent = avatarStudents[index] || null;
+  if (!avatarSelectedStudent) return;
+  setAvatarMessage('Chụp chính diện, đủ sáng và chỉ có một học sinh trong ảnh.');
+  const input = document.getElementById('avatarPhotoInput');
+  input.value = '';
+  input.click();
+}
+
+function loadAvatarImage(file) {
+  return new Promise(function(resolve, reject) {
+    const image = document.getElementById('avatarPhotoDecoder');
+    const objectUrl = URL.createObjectURL(file);
+    image.onload = function() { resolve({ image: image, objectUrl: objectUrl }); };
+    image.onerror = function() { URL.revokeObjectURL(objectUrl); reject(new Error('Không đọc được ảnh vừa chụp.')); };
+    image.src = objectUrl;
+  });
+}
+
+async function processAvatarPhoto(event) {
+  const file = event.target.files && event.target.files[0];
+  const student = avatarSelectedStudent;
+  if (!file || !student || avatarBusy) return;
+  avatarBusy = true;
+  document.getElementById('avatarClassSelect').disabled = true;
+  setAvatarMessage('Đang kiểm tra khuôn mặt trong ảnh...');
+  let loaded = null;
+  try {
+    await loadFaceModels();
+    loaded = await loadAvatarImage(file);
+    const canvas = document.getElementById('avatarCaptureCanvas');
+    const scale = Math.min(1, 1280 / Math.max(loaded.image.naturalWidth, loaded.image.naturalHeight));
+    canvas.width = Math.max(1, Math.round(loaded.image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(loaded.image.naturalHeight * scale));
+    canvas.getContext('2d').drawImage(loaded.image, 0, 0, canvas.width, canvas.height);
+    const detections = await faceapi.detectAllFaces(canvas,
+      new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.55 }));
+    if (detections.length !== 1) throw new Error(detections.length ? 'Ảnh có nhiều khuôn mặt. Hãy chụp riêng một học sinh.' : 'Không thấy rõ khuôn mặt. Hãy chụp lại nơi đủ sáng.');
+    if (detections[0].box.width < canvas.width * 0.16) throw new Error('Khuôn mặt còn quá nhỏ. Hãy đưa máy lại gần hơn.');
+    const photoDataUrl = cropFacePhoto(canvas, detections[0].box);
+    setAvatarMessage('Đang lưu ảnh đại diện lên Drive...');
+    google.script.run
+      .withSuccessHandler(function(result) {
+        student.LinkAnh = result.linkAnh;
+        if (document.getElementById('avatarClassSelect').value === currentClassName) {
+          const sameStudent = students.find(function(item) { return Number(item.STT) === Number(student.STT); });
+          if (sameStudent) sameStudent.LinkAnh = result.linkAnh;
+          if (students[currentStudentIndex] && Number(students[currentStudentIndex].STT) === Number(student.STT)) {
+            showStudentPhoto(result.linkAnh, student.HoVaTen);
+          }
+        }
+        avatarBusy = false;
+        avatarSelectedStudent = null;
+        document.getElementById('avatarClassSelect').disabled = false;
+        renderAvatarStudentList(avatarStudents);
+        setAvatarMessage('Đã lưu ảnh đại diện cho ' + student.HoVaTen + '.', 'success');
+      })
+      .withFailureHandler(function(error) {
+        avatarBusy = false;
+        avatarSelectedStudent = null;
+        document.getElementById('avatarClassSelect').disabled = false;
+        setAvatarMessage('Lưu thất bại: ' + getErrorMessage(error), 'error');
+      })
+      .saveStudentProfilePhoto({
+        className: document.getElementById('avatarClassSelect').value,
+        studentSTT: student.STT,
+        studentName: student.HoVaTen,
+        photoDataUrl: photoDataUrl
+      });
+  } catch (error) {
+    avatarBusy = false;
+    avatarSelectedStudent = null;
+    document.getElementById('avatarClassSelect').disabled = false;
+    setAvatarMessage(getErrorMessage(error), 'error');
+  } finally {
+    if (loaded && loaded.objectUrl) URL.revokeObjectURL(loaded.objectUrl);
+  }
+}
+
+let attendanceSaving = false;
+let absenceStatsRequest = 0;
+
+/**
+ * Tải số buổi vắng theo học sinh, tháng và môn đang chọn.
+ * Hiện tại 1 buổi được quy đổi thành 4 giờ ở phần kết quả bên dưới.
+ */
+function loadAbsenceStats() {
+  const requestId = ++absenceStatsRequest;
+  const dateInput = document.getElementById('attendanceDate');
+  const subjectSelect = document.getElementById('subjectSelect');
+  const title = document.getElementById('absenceStatsTitle');
+  const subjectLabel = document.getElementById('absenceStatsSubject');
+  const excusedElement = document.getElementById('excusedAbsenceCount');
+  const excusedLabel = document.getElementById('excusedAbsenceLabel');
+  const absentElement = document.getElementById('unexcusedAbsenceCount');
+  const absentLabel = document.getElementById('unexcusedAbsenceLabel');
+
+  if (!dateInput || !dateInput.value || !subjectSelect || !subjectSelect.value || !students.length) {
+    if (title && dateInput && dateInput.value) {
+      title.textContent = 'Thống kê tháng ' + Number(dateInput.value.split('-')[1]) + ': — buổi';
+    }
+    if (subjectLabel) subjectLabel.textContent = subjectSelect && subjectSelect.value ? subjectSelect.value : 'Chọn môn học';
+    if (excusedElement) excusedElement.textContent = '—';
+    if (excusedLabel) excusedLabel.textContent = 'Buổi vắng có phép - — giờ';
+    if (absentElement) absentElement.textContent = '—';
+    if (absentLabel) absentLabel.textContent = 'Buổi vắng không phép - — giờ';
+    return;
+  }
+
+  const student = students[currentStudentIndex];
+  title.textContent = 'Thống kê tháng ' + Number(dateInput.value.split('-')[1]) + ': — buổi';
+  subjectLabel.textContent = subjectSelect.value;
+  excusedElement.textContent = '…';
+  absentElement.textContent = '…';
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (requestId !== absenceStatsRequest) return;
+      title.textContent = 'Thống kê tháng ' + result.month + ': ' +
+        (Number(result.excused) + Number(result.absent)) + ' buổi';
+      subjectLabel.textContent = result.subject;
+      excusedElement.textContent = result.excused;
+      excusedLabel.textContent = 'Buổi vắng có phép - ' + (Number(result.excused) * 4) + ' giờ';
+      absentElement.textContent = result.absent;
+      absentLabel.textContent = 'Buổi vắng không phép - ' + (Number(result.absent) * 4) + ' giờ';
+    })
+    .withFailureHandler(function(error) {
+      if (requestId !== absenceStatsRequest) return;
+      excusedElement.textContent = '—';
+      excusedLabel.textContent = 'Buổi vắng có phép - — giờ';
+      absentElement.textContent = '—';
+      absentLabel.textContent = 'Buổi vắng không phép - — giờ';
+      subjectLabel.textContent = 'Không tải được';
+      console.error(getErrorMessage(error));
+    })
+    .getAbsenceStats({
+      className: document.getElementById('classSelect').value,
+      studentSTT: student.STT,
+      studentName: student.HoVaTen,
+      attendanceDate: dateInput.value,
+      subject: subjectSelect.value
+    });
+}
+
+/** Gửi một lần điểm danh sang Code.gs để ghi vào đúng ô Google Sheets. */
+function submitAttendance(button) {
+  if (attendanceSaving || !students.length) return;
+
+  // Dừng các tác vụ nền chưa chạy để yêu cầu ghi là tác vụ Google duy nhất.
+  cancelPendingAttendanceBackground();
+
+  const student = students[currentStudentIndex];
+  const dateInput = document.getElementById('attendanceDate');
+  const classSelect = document.getElementById('classSelect');
+  const teacherSelect = document.getElementById('teacherSelect');
+  const subjectSelect = document.getElementById('subjectSelect');
+  const session = getActiveSessionCode();
+
+  if (!dateInput || !dateInput.value) {
+    alert('Chưa chọn ngày điểm danh.');
+    return;
+  }
+
+  const wantedSubject = normalizeSubjectText(subjectSelect.value);
+  const cachedSubjectInfo = subjectDetails.find(function(item) {
+    return normalizeSubjectText(item.TenMH) === wantedSubject;
+  }) || null;
+
+  const payload = {
+    className: classSelect.value,
+    studentSTT: student.STT,
+    studentName: student.HoVaTen,
+    attendanceDate: dateInput.value,
+    session: session,
+    status: button.dataset.status,
+    teacher: teacherSelect.value,
+    subject: subjectSelect.value,
+    // Đã nạp khi chọn lớp; Code.gs dùng lại nếu cache máy chủ tạm thời bị mất.
+    subjectSnapshot: cachedSubjectInfo ? {
+      TenMH: cachedSubjectInfo.TenMH,
+      row: cachedSubjectInfo._Row,
+      subjectColumn: cachedSubjectInfo._SubjectColumn,
+      startDateColumn: cachedSubjectInfo._StartDateColumn,
+      progressColumn: cachedSubjectInfo._ProgressColumn,
+      schoolYearStart: cachedSubjectInfo._SchoolYearStart,
+      NgayBatDau: cachedSubjectInfo.NgayBatDau,
+      TienDo: cachedSubjectInfo.TienDo,
+      TongSoGio: cachedSubjectInfo.TongSoGio,
+      StoredNgayBatDau: cachedSubjectInfo._StoredNgayBatDau,
+      StoredTienDo: cachedSubjectInfo._StoredTienDo
+    } : null
+  };
+
+  attendanceSaving = true;
+  setAttendanceButtonsBusy(true);
+  setAttendanceMessage('Đang ghi điểm danh...');
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      attendanceSaving = false;
+      setAttendanceButtonsBusy(false);
+      clearAttendanceSelection();
+      button.classList.add('selected');
+
+      const statusName = result.mark === 'V'
+        ? 'Vắng'
+        : result.mark === 'P'
+          ? 'Có phép'
+          : 'Có mặt';
+      const sessionName = result.session === 'C' ? 'Buổi chiều' : 'Buổi sáng';
+      const makeupText = result.isMakeup ? ' · Điểm danh bù' : '';
+      setAttendanceMessage(
+        'Đã ghi ' + statusName + ' · ' + sessionName + makeupText +
+        ' · ' + result.sheetName + ' · Ô ' + result.cell
+      );
+      // Code.gs vừa trả về cả lớp của đúng cột đã ghi, nên Danh sách lớp đổi
+      // trạng thái ngay cả khi cửa sổ này đang mở.
+      applyAttendanceStatusData(result, attendanceWarmupKey);
+      attendanceStatusByStudent[normalizeStudentStatusKey(student.STT)] =
+        result.mark === 'V' ? 'ABSENT' : result.mark === 'P' ? 'EXCUSED' : 'PRESENT';
+      const studentJumpOverlay = document.getElementById('studentJumpOverlay');
+      if (studentJumpOverlay && studentJumpOverlay.classList.contains('show')) {
+        renderStudentJumpList(document.getElementById('studentJumpSearch').value);
+      }
+      if (result.subjectProgress) {
+        const wantedSubject = normalizeSubjectText(payload.subject);
+        const subjectInfo = subjectDetails.find(function(item) {
+          return normalizeSubjectText(item.TenMH) === wantedSubject;
+        });
+        if (subjectInfo) {
+          subjectInfo.NgayBatDau = result.subjectProgress.NgayBatDau || '';
+          subjectInfo.TienDo = result.subjectProgress.TienDo || '0';
+          subjectInfo._StoredNgayBatDau = result.subjectProgress.StoredNgayBatDau || subjectInfo.NgayBatDau;
+          subjectInfo._StoredTienDo = result.subjectProgress.StoredTienDo || subjectInfo.TienDo;
+          subjectInfo._SchoolYearStart = result.subjectProgress.schoolYearStart;
+          updateSubjectInfo();
+        }
+      }
+      // Hiển thị trạng thái "Đã ghi" trước; thống kê V/P tải lại ở nền.
+      scheduleAbsenceStats(120);
+    })
+    .withFailureHandler(function(error) {
+      attendanceSaving = false;
+      setAttendanceButtonsBusy(false);
+      setAttendanceMessage('Ghi điểm danh thất bại');
+      alert('Không ghi được điểm danh:\n' + getErrorMessage(error));
+    })
+    .saveAttendance(payload);
+}
+
+function setAttendanceButtonsBusy(isBusy) {
+  document.querySelectorAll('.status-btn').forEach(function(button) {
+    button.style.pointerEvents = isBusy ? 'none' : '';
+    button.style.opacity = isBusy ? '.55' : '';
+  });
+}
+
+function setAttendanceMessage(message) {
+  const element = document.getElementById('attendanceStatus');
+  if (element) element.textContent = message;
+}
+
+function clearAttendanceSelection() {
+  document.querySelectorAll('.status-btn').forEach(function(button) {
+    button.classList.remove('selected');
+  });
+}
+
+/** Cập nhật nút gọi điện, Zalo và tin nhắn theo số điện thoại. */
+function updateContactButtons(groupSelector, phone) {
+  const group = document.querySelector(groupSelector);
+  if (!group) return;
+  const buttons = group.querySelectorAll('.contact-btn');
+  const cleanPhone = normalizePhoneNumber(phone);
+  const zaloPhone = toVietnameseLocalPhone(cleanPhone);
+  buttons.forEach(function(button, index) {
+    button.style.opacity = cleanPhone ? '1' : '.45';
+    button.onclick = function() {
+      if (!cleanPhone) {
+        alert('Chưa có số điện thoại cho người này.');
+        return;
+      }
+
+      // Gọi bằng SIM của điện thoại. Dùng liên kết thật để thoát khỏi
+      // iframe bảo mật của Google Apps Script và mở ứng dụng Điện thoại.
+      if (index === 0) openPhoneAction('tel:' + cleanPhone);
+
+      // Mở đúng tài khoản Zalo theo số điện thoại.
+      // Từ trang Zalo người dùng có thể nhắn hoặc thực hiện cuộc gọi Zalo.
+      if (index === 1) openPhoneAction('https://zalo.me/' + zaloPhone);
+
+      // Cho chọn nhắn qua Zalo hoặc ứng dụng SMS.
+      if (index === 2) showMessageChoices(cleanPhone, zaloPhone);
+    };
+  });
+}
+
+function showMessageChoices(phone, zaloPhone) {
+  const overlay = document.getElementById('messageChoiceOverlay');
+  const zaloButton = document.getElementById('messageByZalo');
+  const smsButton = document.getElementById('messageBySms');
+  const cancelButton = document.getElementById('cancelMessageChoice');
+  if (!overlay) return;
+
+  zaloButton.onclick = function() {
+    closeMessageChoices();
+    openPhoneAction('https://zalo.me/' + zaloPhone);
+  };
+  smsButton.onclick = function() {
+    closeMessageChoices();
+    openPhoneAction('sms:' + phone);
+  };
+  cancelButton.onclick = closeMessageChoices;
+  overlay.onclick = function(event) {
+    if (event.target === overlay) closeMessageChoices();
+  };
+  overlay.classList.add('show');
+}
+
+function closeMessageChoices() {
+  const overlay = document.getElementById('messageChoiceOverlay');
+  if (overlay) overlay.classList.remove('show');
+}
+
+function openPhoneAction(url) {
+  const link = document.createElement('a');
+  link.href = url;
+  link.target = '_top';
+  link.rel = 'noopener';
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  setTimeout(function() {
+    link.remove();
+  }, 1000);
+}
+
+function normalizePhoneNumber(phone) {
+  let value = String(phone || '').trim().replace(/[^\d+]/g, '');
+  if (value.indexOf('0084') === 0) value = '+84' + value.slice(4);
+  if (value.indexOf('84') === 0 && value.charAt(0) !== '+') value = '+' + value;
+  return value;
+}
+
+function toVietnameseLocalPhone(phone) {
+  const value = String(phone || '');
+  if (value.indexOf('+84') === 0) return '0' + value.slice(3);
+  if (value.indexOf('84') === 0) return '0' + value.slice(2);
+  return value;
+}
+
+function showNoStudent(message) {
+  showStudentPhoto('', '');
+  const quickListButton = document.getElementById('studentQuickListButton');
+  if (quickListButton) quickListButton.disabled = true;
+  setText('studentName', message);
+  setText('studentMeta', '—');
+  setText('studentId', '—');
+  setText('contactStudentName', '—');
+  setText('contactFatherName', '—');
+  setText('contactMotherName', '—');
+  setText('profileBirthDate', '—');
+  setText('profileCCCD', '—');
+  setText('profileBHYT', '—');
+  setText('profileFather', '—');
+  setText('profileMother', '—');
+  setText('profileAddress', '—');
+  setText('profileNote', '');
+  document.getElementById('profileNoteRow').setAttribute('aria-disabled', 'true');
+  updateContactButtons('.contact-group.student', '');
+  updateContactButtons('.contact-group.father', '');
+  updateContactButtons('.contact-group.mother', '');
+  clearAttendanceSelection();
+}
+
+function fillSelect(selectId, values, firstText) {
+  const select = document.getElementById(selectId);
+  select.innerHTML = '';
+  select.appendChild(new Option(firstText, ''));
+  (values || []).forEach(function(value) { select.appendChild(new Option(value, value)); });
+  select.disabled = false;
+  syncClassPickerTrigger(select);
+}
+function setSelectWaiting(selectId, text) {
+  const select = document.getElementById(selectId);
+  select.innerHTML = '';
+  select.appendChild(new Option(text, ''));
+  select.disabled = true;
+  syncClassPickerTrigger(select);
+}
+/** Khôi phục giáo viên và lớp được chọn gần nhất trên thiết bị này. */
+function restoreLastSelections() {
+  restoreSelectValue('teacherSelect', localStorage.getItem(STORAGE_DEFAULT_TEACHER));
+  restoreSelectValue('classSelect', localStorage.getItem(STORAGE_DEFAULT_CLASS));
+}
+
+/** Khôi phục môn gần nhất của đúng lớp đang mở. */
+function restoreLastSubject(className) {
+  restoreSelectValue(
+    'subjectSelect',
+    localStorage.getItem(STORAGE_SUBJECT_PREFIX + String(className || ''))
+  );
+}
+
+/** Chỉ khôi phục khi giá trị cũ vẫn còn tồn tại trong danh sách hiện tại. */
+function restoreSelectValue(selectId, savedValue) {
+  const select = document.getElementById(selectId);
+  if (!select || !savedValue) return false;
+  const exists = Array.from(select.options).some(function(option) {
+    return option.value === savedValue;
+  });
+  if (exists) select.value = savedValue;
+  syncClassPickerTrigger(select);
+  return exists;
+}
+function setText(id, value) {
+  const element = document.getElementById(id);
+  if (element) element.textContent = value == null ? '' : String(value);
+}
+function formatParentInfo(name, phone) {
+  const cleanName = String(name || '').trim();
+  const cleanPhone = String(phone || '').trim();
+  if (!cleanName && !cleanPhone) return '—';
+  if (cleanName && cleanPhone) return cleanName + ' · ' + cleanPhone;
+  return cleanName || cleanPhone;
+}
+function makeInitials(name) {
+  const text = String(name || '').trim();
+  if (!text) return '--';
+  const words = text.split(/\s+/);
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[words.length - 2][0] + words[words.length - 1][0]).toUpperCase();
+}
+
+/**
+ * Giữ LinkAnh trong Google Sheets ở dạng đầy đủ; giao diện tự lấy ID Drive.
+ * Hỗ trợ các dạng /file/d/ID, open?id=ID, uc?id=ID và thumbnail?id=ID.
+ */
+function getStudentPhotoUrl(fullLink) {
+  const link = String(fullLink || '').trim();
+  if (!link) return '';
+
+  const drivePatterns = [
+    /\/file\/d\/([a-zA-Z0-9_-]{20,})/,
+    /[?&]id=([a-zA-Z0-9_-]{20,})/,
+    /\/d\/([a-zA-Z0-9_-]{20,})/
+  ];
+  for (let i = 0; i < drivePatterns.length; i++) {
+    const match = link.match(drivePatterns[i]);
+    if (match) {
+      const resourceKeyMatch = link.match(/[?&]resourcekey=([a-zA-Z0-9_-]+)/i);
+      return 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(match[1]) +
+        (resourceKeyMatch ? '&resourcekey=' + encodeURIComponent(resourceKeyMatch[1]) : '') +
+        '&sz=w400';
+    }
+  }
+
+  // Nếu LinkAnh là URL ảnh trực tiếp ngoài Drive thì vẫn hiển thị bình thường.
+  if (/^https?:\/\//i.test(link)) return link;
+  return '';
+}
+
+/** Hiển thị ảnh; tự quay về chữ viết tắt nếu ảnh trống, lỗi hoặc thiếu quyền xem. */
+function showStudentPhoto(fullLink, studentName, onSettled) {
+  const avatar = document.getElementById('studentAvatar');
+  const image = document.getElementById('studentAvatarImage');
+  const initials = document.getElementById('studentAvatarInitials');
+  if (!avatar || !image || !initials) return;
+
+  const imageUrl = getStudentPhotoUrl(fullLink);
+  const largeImageUrl = imageUrl.replace(/([?&]sz=)w\d+/i, '$1w1600');
+  const requestKey = imageUrl + '|' + String(studentName || '');
+  const selectedStudent = students[currentStudentIndex] || {};
+  const proxyPayload = {
+    className: currentClassName,
+    studentSTT: selectedStudent.STT || '',
+    studentName: studentName || selectedStudent.HoVaTen || ''
+  };
+  const proxyCacheKey = getProfilePhotoDataCacheKey(currentClassName, {
+    STT: proxyPayload.studentSTT,
+    LinkAnh: fullLink
+  });
+  let viewerImageUrl = largeImageUrl;
+  let proxyAttempted = false;
+  avatar.dataset.photoRequest = requestKey;
+  avatar.dataset.photoFullUrl = '';
+  avatar.dataset.photoStudentName = '';
+  avatar.classList.remove('has-photo');
+  avatar.setAttribute('aria-disabled', 'true');
+  avatar.setAttribute('aria-label', 'Chưa có ảnh để xem');
+  initials.textContent = studentName ? makeInitials(studentName) : '--';
+  image.removeAttribute('src');
+
+  if (!imageUrl) {
+    if (typeof onSettled === 'function') onSettled();
+    return;
+  }
+  let settled = false;
+  function clearPhoto() {
+    if (avatar.dataset.photoRequest !== requestKey) return;
+    avatar.classList.remove('has-photo');
+    avatar.dataset.photoFullUrl = '';
+    avatar.dataset.photoStudentName = '';
+  }
+  function finish() {
+    if (settled) return;
+    settled = true;
+    if (typeof onSettled === 'function') onSettled();
+  }
+  image.onload = function() {
+    if (avatar.dataset.photoRequest === requestKey) {
+      avatar.classList.add('has-photo');
+      avatar.dataset.photoFullUrl = viewerImageUrl;
+      avatar.dataset.photoStudentName = String(studentName || 'Học sinh');
+      avatar.setAttribute('aria-disabled', 'false');
+      avatar.setAttribute('aria-label', 'Xem ảnh lớn của ' + String(studentName || 'học sinh'));
+    }
+    finish();
+  };
+  image.onerror = function() {
+    if (avatar.dataset.photoRequest !== requestKey) {
+      finish();
+      return;
+    }
+    if (!proxyAttempted && proxyPayload.className && (proxyPayload.studentSTT || proxyPayload.studentName)) {
+      proxyAttempted = true;
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (avatar.dataset.photoRequest !== requestKey) { finish(); return; }
+          const dataUrl = result && result.photoDataUrl ? String(result.photoDataUrl) : '';
+          if (!/^data:image\//i.test(dataUrl)) { clearPhoto(); finish(); return; }
+          profilePhotoProxyMode = true;
+          viewerImageUrl = dataUrl;
+          cacheProfilePhotoData(proxyCacheKey, dataUrl);
+          image.src = dataUrl;
+        })
+        .withFailureHandler(function() {
+          clearPhoto();
+          finish();
+        })
+        .getStudentProfilePhotoData(proxyPayload);
+      return;
+    }
+    clearPhoto();
+    finish();
+  };
+  const cachedDataUrl = profilePhotoDataCache.get(proxyCacheKey);
+  if (cachedDataUrl) {
+    proxyAttempted = true;
+    viewerImageUrl = cachedDataUrl;
+    image.src = cachedDataUrl;
+  } else {
+    image.src = imageUrl;
+  }
+}
+
+/** Mở ảnh đại diện kích thước lớn để giáo viên nhận diện học sinh. */
+function openStudentPhotoViewer() {
+  const avatar = document.getElementById('studentAvatar');
+  const fullUrl = avatar.dataset.photoFullUrl || '';
+  if (!avatar.classList.contains('has-photo') || !fullUrl) return;
+
+  const overlay = document.getElementById('studentPhotoViewer');
+  const largeImage = document.getElementById('studentPhotoLarge');
+  const studentName = avatar.dataset.photoStudentName || 'Học sinh';
+  document.getElementById('studentPhotoViewerName').textContent = studentName;
+  largeImage.alt = 'Ảnh đại diện của ' + studentName;
+  largeImage.src = fullUrl;
+  overlay.classList.add('show');
+  overlay.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('photo-viewer-open');
+}
+
+function closeStudentPhotoViewer() {
+  const overlay = document.getElementById('studentPhotoViewer');
+  if (!overlay || !overlay.classList.contains('show')) return;
+  overlay.classList.remove('show');
+  overlay.setAttribute('aria-hidden', 'true');
+  document.getElementById('studentPhotoLarge').removeAttribute('src');
+  document.body.classList.remove('photo-viewer-open');
+}
+
+/** Mở danh sách lớp để giáo viên nhảy nhanh đến một học sinh. */
+function openStudentJumpList() {
+  if (!students.length) return;
+  const overlay = document.getElementById('studentJumpOverlay');
+  const search = document.getElementById('studentJumpSearch');
+  document.getElementById('studentJumpTitle').textContent =
+    'Danh sách lớp ' + (currentClassName || '') + ' (' + students.length + ')';
+  search.value = '';
+  renderStudentJumpList('');
+  overlay.classList.add('show');
+  overlay.setAttribute('aria-hidden', 'false');
+}
+
+function closeStudentJumpList() {
+  const overlay = document.getElementById('studentJumpOverlay');
+  if (!overlay || !overlay.classList.contains('show')) return;
+  // Bỏ tiêu điểm trước khi đóng để iPhone thu bàn phím và giữ nguyên tỉ lệ trang.
+  const search = document.getElementById('studentJumpSearch');
+  if (search) search.blur();
+  overlay.classList.remove('show');
+  overlay.setAttribute('aria-hidden', 'true');
+}
+
+function renderStudentJumpList(query) {
+  const container = document.getElementById('studentJumpList');
+  const wanted = normalizeSubjectText(query);
+  container.innerHTML = '';
+  let shown = 0;
+
+  students.forEach(function(student, index) {
+    const searchable = normalizeSubjectText([
+      student.STT || index + 1,
+      student.HoVaTen || '',
+      student.MSSV || ''
+    ].join(' '));
+    if (wanted && searchable.indexOf(wanted) === -1) return;
+
+    shown++;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'student-jump-row' + (index === currentStudentIndex ? ' current' : '');
+    button.dataset.studentJumpIndex = String(index);
+    const attendance = getStudentJumpStatus(student);
+    button.innerHTML =
+      '<span class="student-jump-stt">' + escapeHtml(String(student.STT || index + 1).padStart(3, '0')) + '</span>' +
+      '<span class="student-jump-name">' + escapeHtml(student.HoVaTen || 'Chưa có tên') + '</span>' +
+      '<span class="student-jump-status ' + attendance.key + '" title="' + attendance.label + '" aria-label="' + attendance.label + '">' + attendance.symbol + '</span>';
+    button.addEventListener('click', function() {
+      closeStudentJumpList();
+      showStudent(index);
+    });
+    container.appendChild(button);
+  });
+
+  if (!shown) container.innerHTML = '<div class="student-jump-empty">Không tìm thấy học sinh phù hợp.</div>';
+  if (!wanted) {
+    const current = container.querySelector('[data-student-jump-index="' + currentStudentIndex + '"]');
+    if (current) requestAnimationFrame(function() { current.scrollIntoView({ block: 'center' }); });
+  }
+}
+
+/** Chỉ sau khi HS hiện tại hoàn tất mới âm thầm chuẩn bị ảnh liền trước/liền sau. */
+function scheduleAdjacentPhotoPreload(currentIndex) {
+  if (currentIndex !== currentStudentIndex) return;
+  const run = function() {
+    if (currentIndex !== currentStudentIndex) return;
+    [currentIndex - 1, currentIndex + 1].forEach(function(index) {
+      if (index < 0 || index >= students.length) return;
+      preloadStudentPhoto(students[index].LinkAnh);
+    });
+  };
+
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(run, { timeout: 800 });
+  } else {
+    setTimeout(run, 120);
+  }
+}
+
+function preloadStudentPhoto(fullLink) {
+  const imageUrl = getStudentPhotoUrl(fullLink);
+  if (!imageUrl || adjacentPhotoCache.has(imageUrl)) return;
+
+  const preloadImage = new Image();
+  adjacentPhotoCache.set(imageUrl, preloadImage);
+  preloadImage.onerror = function() {
+    adjacentPhotoCache.delete(imageUrl);
+  };
+  preloadImage.src = imageUrl;
+
+  // Chỉ giữ một vùng nhỏ quanh HS hiện tại, tránh chiếm bộ nhớ khi lớp đông.
+  while (adjacentPhotoCache.size > MAX_PRELOADED_PHOTOS) {
+    const oldestUrl = adjacentPhotoCache.keys().next().value;
+    adjacentPhotoCache.delete(oldestUrl);
+  }
+}
+
+function getProfilePhotoDataCacheKey(className, student) {
+  return [
+    String(className || ''),
+    String(student && student.STT || ''),
+    String(student && student.LinkAnh || '')
+  ].join('|');
+}
+
+function cacheProfilePhotoData(key, dataUrl) {
+  if (!key || !dataUrl) return;
+  profilePhotoDataCache.set(key, dataUrl);
+  while (profilePhotoDataCache.size > MAX_PROFILE_PHOTO_DATA_CACHE) {
+    profilePhotoDataCache.delete(profilePhotoDataCache.keys().next().value);
+  }
+}
+
+/**
+ * Khi tài khoản bị Drive chặn, chuẩn bị riêng ảnh liền trước, liền sau và ảnh
+ * thứ hai kế tiếp qua một lần gọi Code.gs. Không tải toàn bộ lớp.
+ */
+function scheduleProxyAdjacentPhotoPreload(currentIndex) {
+  if (!profilePhotoProxyMode || currentIndex !== currentStudentIndex || !currentClassName) return;
+  const className = currentClassName;
+  const generation = profilePhotoPreloadGeneration;
+  const refs = [];
+  const pendingKeys = [];
+
+  [currentIndex - 1, currentIndex + 1, currentIndex + 2].forEach(function(index) {
+    if (index < 0 || index >= students.length) return;
+    const student = students[index];
+    if (!String(student.LinkAnh || '').trim()) return;
+    const key = getProfilePhotoDataCacheKey(className, student);
+    if (profilePhotoDataCache.has(key) || profilePhotoProxyPending.has(key)) return;
+    profilePhotoProxyPending.add(key);
+    pendingKeys.push(key);
+    refs.push({ studentSTT: student.STT, studentName: student.HoVaTen });
+  });
+  if (!refs.length) return;
+
+  const releasePending = function() {
+    pendingKeys.forEach(function(key) { profilePhotoProxyPending.delete(key); });
+  };
+  const run = function() {
+    if (generation !== profilePhotoPreloadGeneration || className !== currentClassName) {
+      releasePending();
+      return;
+    }
+    google.script.run
+      .withSuccessHandler(function(result) {
+        releasePending();
+        if (generation !== profilePhotoPreloadGeneration || className !== currentClassName) return;
+        const photos = result && Array.isArray(result.photos) ? result.photos : [];
+        photos.forEach(function(photo) {
+          const student = students.find(function(item) {
+            const itemSTT = String(item.STT || '').trim();
+            const photoSTT = String(photo.studentSTT || '').trim();
+            return itemSTT === photoSTT ||
+              (itemSTT && photoSTT && isFinite(Number(itemSTT)) &&
+                isFinite(Number(photoSTT)) && Number(itemSTT) === Number(photoSTT));
+          });
+          if (!student || String(student.LinkAnh || '') !== String(photo.linkAnh || '')) return;
+          const dataUrl = String(photo.photoDataUrl || '');
+          if (/^data:image\//i.test(dataUrl)) {
+            cacheProfilePhotoData(getProfilePhotoDataCacheKey(className, student), dataUrl);
+          }
+        });
+      })
+      .withFailureHandler(releasePending)
+      .getStudentProfilePhotosData({ className: className, students: refs });
+  };
+
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(run, { timeout: 500 });
+  } else {
+    setTimeout(run, 80);
+  }
+}
+function getErrorMessage(error) {
+  return error && error.message ? error.message : String(error || 'Lỗi không xác định');
+}
+
+
+/** Chuyển trang bằng thanh điều hướng cố định phía dưới. */
+function setupBottomNavigation() {
+  const navItems = Array.from(document.querySelectorAll('#bottomNav .navitem'));
+  const pages = Array.from(document.querySelectorAll('.app-page'));
+
+  function showPage(pageId) {
+    pages.forEach(function(page) {
+      const active = page.id === pageId;
+      page.classList.toggle('active-page', active);
+      page.setAttribute('aria-hidden', active ? 'false' : 'true');
+    });
+
+    navItems.forEach(function(item) {
+      const active = item.dataset.page === pageId;
+      item.classList.toggle('active', active);
+
+      const ring = item.querySelector('.ring');
+      if (active && !ring) {
+        const dot = document.createElement('span');
+        dot.className = 'ring';
+        item.appendChild(dot);
+      } else if (!active && ring) {
+        ring.remove();
+      }
+    });
+
+    // Mỗi lần bấm Cài đặt đều mở từ danh sách chức năng chính.
+    if (pageId === 'pageSettings') showSettingsPanel('settingsMenuPanel');
+
+    // Luôn đưa trang mới về đầu khi đổi mục.
+    window.scrollTo(0, 0);
+  }
+
+  navItems.forEach(function(item) {
+    item.addEventListener('click', function() {
+      const pageId = item.dataset.page;
+      if (!pageId) return;
+      showPage(pageId);
+    });
+  });
+
+  // Trạng thái ban đầu: Điểm danh.
+  showPage('pageAttendance');
+}
+
+/** Ép giao diện về Điểm danh khi mở mới, quay lại hoặc mở lại tab WebApp. */
+function forceAttendancePage() {
+  const pages = Array.from(document.querySelectorAll('.app-page'));
+  const navItems = Array.from(document.querySelectorAll('#bottomNav .navitem'));
+  pages.forEach(function(page) {
+    const active = page.id === 'pageAttendance';
+    page.classList.toggle('active-page', active);
+    page.setAttribute('aria-hidden', active ? 'false' : 'true');
+  });
+  navItems.forEach(function(item) {
+    const active = item.dataset.page === 'pageAttendance';
+    item.classList.toggle('active', active);
+    const ring = item.querySelector('.ring');
+    if (active && !ring) {
+      const dot = document.createElement('span');
+      dot.className = 'ring';
+      item.appendChild(dot);
+    } else if (!active && ring) {
+      ring.remove();
+    }
+  });
+  window.scrollTo(0, 0);
+}
+
+window.addEventListener('pageshow', forceAttendancePage);
+document.addEventListener('visibilitychange', function() {
+  // Khi máy ảnh hệ thống trả video về, phải giữ nguyên màn hình đăng ký để xử lý.
+  if (document.visibilityState === 'visible' && !faceSelectedStudent && !avatarSelectedStudent) forceAttendancePage();
+});
+
+/* Điểm bắt đầu: chạy sau khi toàn bộ giao diện đã tải xong. */
+window.addEventListener('load', function() {
+  forceAttendancePage();
+  setupBottomNavigation();
+  setupClassPickers();
+  setupInterfaceActions();
+  loadAppConfig();
+});
+</script>
+
+
+
+
+</body>
+</html>
